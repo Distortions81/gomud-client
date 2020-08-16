@@ -13,22 +13,67 @@ import (
 	"golang.org/x/image/font"
 )
 
-var screenWidth = 1280
-var screenHeight = 720
-var ourFont []byte
-var newFont font.Face
+//Greeting
+const DefaultGreetFile = "greet.txt"
+
+//Window
+const DefaultWindowWidth = 1280
+const DefaultWindowHeight = 720
+const DefaultWindowDPI = 72
+
+const DefaultRepeatInterval = 3
+const DefaultRepeatDelay = 60
+
+const DefaultWindowTitle = "GoMud-Client"
+
+type Window struct {
+	Title  string
+	Width  int
+	Height int
+	DPI    int
+
+	TextLines   int
+	TextColumns int
+
+	Scroll ScrollData
+	Font   FontData
+
+	RepeatInterval int
+	RepeatDelay    int
+}
+
+//Scroll
+type ScrollData struct {
+	ScrollPos int
+}
+
+//Font
+const DefaultFontFile = "unispace rg.ttf"
+const glyphCacheSize = 512
+const DefaultVerticalSpace = 6
+const DefaultFontSize = 30
+
+type FontData struct {
+	VerticalSpace int
+	Size          int
+	Data          []byte
+	Face          font.Face
+
+	Color string
+	Dirty bool
+}
+
+//Data
+var MainWin Window
+var ActiveWin *Window
 
 // repeatingKeyPressed return true when key is pressed considering the repeat state.
 func repeatingKeyPressed(key ebiten.Key) bool {
-	const (
-		delay    = 30
-		interval = 3
-	)
 	d := inpututil.KeyPressDuration(key)
 	if d == 1 {
 		return true
 	}
-	if d >= delay && (d-delay)%interval == 0 {
+	if d >= ActiveWin.RepeatDelay && (d-ActiveWin.RepeatDelay)%ActiveWin.RepeatInterval == 0 {
 		return true
 	}
 	return false
@@ -45,9 +90,9 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	// every frame.
 	g.text += string(ebiten.InputChars())
 
-	// Adjust the string to be at most 10 lines.
+	// Adjust the string to be at most x lines.
 	ss := strings.Split(g.text, "\n")
-	numLines := screenHeight / 35
+	numLines := ActiveWin.Height / (ActiveWin.Font.Size + ActiveWin.Font.VerticalSpace)
 
 	if len(ss) > numLines {
 		g.text = strings.Join(ss[len(ss)-numLines:], "\n")
@@ -78,42 +123,60 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	lines := strings.Split(t, "\n")
 	for x, l := range lines {
-		text.Draw(screen, l, newFont, 0, 30+(x*36), color.White)
+		text.Draw(screen, l, ActiveWin.Font.Face, 0, ActiveWin.Font.Size+(x*(ActiveWin.Font.Size+ActiveWin.Font.VerticalSpace)), color.White)
 	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	x, y := ebiten.WindowSize()
-	screenHeight = y
-	screenWidth = x
+	ActiveWin.Height = y
+	ActiveWin.Width = x
 	return x, y
 }
 
 func main() {
 	var err error
-	ourFont, err = ioutil.ReadFile("unispace rg.ttf")
+
+	//Read default font
+	MainWin.Font.Data, err = ioutil.ReadFile(DefaultFontFile)
 	if err != nil {
 		log.Fatal(err)
 
 	}
+
+	//Read default greeting
 	var greeting []byte
-	greeting, err = ioutil.ReadFile("greet.txt")
+	greeting, err = ioutil.ReadFile(DefaultGreetFile)
 	if err != nil {
 		log.Fatal(err)
 
 	}
 
-	tt, err := truetype.Parse(ourFont)
+	//Load font
+	tt, err := truetype.Parse(MainWin.Font.Data)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	const dpi = 72
-	newFont = truetype.NewFace(tt, &truetype.Options{
-		Size:              30,
-		DPI:               dpi,
+	//Load window defaults
+	MainWin.Title = DefaultWindowTitle
+	MainWin.Width = DefaultWindowWidth
+	MainWin.Height = DefaultWindowHeight
+	MainWin.DPI = DefaultWindowDPI
+
+	MainWin.Font.VerticalSpace = DefaultVerticalSpace
+	MainWin.Font.Size = DefaultFontSize
+
+	MainWin.RepeatDelay = DefaultRepeatDelay
+	MainWin.RepeatInterval = DefaultRepeatInterval
+	ActiveWin = &MainWin
+
+	//Init font
+	MainWin.Font.Face = truetype.NewFace(tt, &truetype.Options{
+		Size:              float64(MainWin.Font.Size),
+		DPI:               float64(MainWin.DPI),
 		Hinting:           font.HintingFull,
-		GlyphCacheEntries: 512,
+		GlyphCacheEntries: glyphCacheSize,
 	})
 
 	g := &Game{
@@ -121,8 +184,8 @@ func main() {
 		counter: 0,
 	}
 
-	ebiten.SetWindowSize(screenWidth, screenHeight)
-	ebiten.SetWindowTitle("gomud-client")
+	ebiten.SetWindowSize(MainWin.Width, MainWin.Height)
+	ebiten.SetWindowTitle(MainWin.Title)
 	ebiten.SetWindowResizable(true)
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
