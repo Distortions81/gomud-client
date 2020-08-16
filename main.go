@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"io/ioutil"
 	"log"
+	"math"
 	"strings"
 
 	"github.com/golang/freetype/truetype"
@@ -20,9 +21,10 @@ const VersionString = "Pre-Alpha build, v0.0.01 08162020-0909"
 const DefaultGreetFile = "greet.txt"
 
 //Window
-const DefaultWindowWidth = 1280
-const DefaultWindowHeight = 720
+const DefaultWindowWidth = 640.0
+const DefaultWindowHeight = 360.0
 const DefaultWindowDPI = 72
+const DefaultMagnification = 2.33
 
 const DefaultRepeatInterval = 3
 const DefaultRepeatDelay = 60
@@ -57,8 +59,9 @@ type ScrollData struct {
 //Font
 const DefaultFontFile = "unispace rg.ttf"
 const glyphCacheSize = 512
-const DefaultVerticalSpace = 6
-const DefaultFontSize = 30
+const DefaultVerticalSpace = 3.0
+const DefaultFontSize = 12.0
+const LeftMargin = 4.0
 
 type FontData struct {
 	VerticalSpace int
@@ -75,7 +78,6 @@ var MainWin Window
 var ActiveWin *Window
 
 type Game struct {
-	text    string
 	counter int
 }
 
@@ -92,27 +94,28 @@ func repeatingKeyPressed(key ebiten.Key) bool {
 }
 
 func (g *Game) Update(screen *ebiten.Image) error {
-	// Add a string from InputChars, that returns string input by users.
-	// Note that InputChars result changes every frame, so you need to call this
-	// every frame.
+
+	//Add input
 	ActiveWin.ScrollBack += string(ebiten.InputChars())
 
-	// Adjust the string to be at most x lines.
 	ss := strings.Split(ActiveWin.ScrollBack, "\n")
+
+	//Calculate lines that will fit in window height
 	numLines := ActiveWin.Height / (ActiveWin.Font.Size + ActiveWin.Font.VerticalSpace)
 
+	//Crop scrollback if needed
 	if len(ss) > numLines {
 		ActiveWin.Text = strings.Join(ss[len(ss)-numLines:], "\n")
 	} else {
 		ActiveWin.Text = ActiveWin.ScrollBack
 	}
 
-	// If the enter key is pressed, add a line break.
+	//Add linebreaks
 	if repeatingKeyPressed(ebiten.KeyEnter) || repeatingKeyPressed(ebiten.KeyKPEnter) {
 		ActiveWin.ScrollBack += "\n"
 	}
 
-	// If the backspace key is pressed, remove one character.
+	//Backspace
 	if repeatingKeyPressed(ebiten.KeyBackspace) {
 		if len(ActiveWin.ScrollBack) >= 1 {
 			ActiveWin.ScrollBack = ActiveWin.ScrollBack[:len(ActiveWin.ScrollBack)-1]
@@ -126,13 +129,13 @@ func (g *Game) Update(screen *ebiten.Image) error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	// Blink the cursor.
 	t := ActiveWin.Text
-	if g.counter%60 < 30 {
+	if ActiveWin.Tick%60 < 30 {
 		t += "_"
 	}
 
 	lines := strings.Split(t, "\n")
 	for x, l := range lines {
-		text.Draw(screen, l, ActiveWin.Font.Face, 0, ActiveWin.Font.Size+(x*(ActiveWin.Font.Size+ActiveWin.Font.VerticalSpace)), color.White)
+		text.Draw(screen, l, ActiveWin.Font.Face, LeftMargin, ActiveWin.Font.Size+(x*(ActiveWin.Font.Size+ActiveWin.Font.VerticalSpace)), color.White)
 	}
 }
 
@@ -169,12 +172,12 @@ func main() {
 
 	//Load window defaults
 	MainWin.Title = DefaultWindowTitle
-	MainWin.Width = DefaultWindowWidth
-	MainWin.Height = DefaultWindowHeight
+	MainWin.Width = int(math.Round(DefaultWindowWidth * DefaultMagnification))
+	MainWin.Height = int(math.Round(DefaultWindowHeight * DefaultMagnification))
 	MainWin.DPI = DefaultWindowDPI
 
-	MainWin.Font.VerticalSpace = DefaultVerticalSpace
-	MainWin.Font.Size = DefaultFontSize
+	MainWin.Font.VerticalSpace = int(math.Round(DefaultVerticalSpace * DefaultMagnification))
+	MainWin.Font.Size = int(math.Round(DefaultFontSize * DefaultMagnification))
 
 	MainWin.RepeatDelay = DefaultRepeatDelay
 	MainWin.RepeatInterval = DefaultRepeatInterval
