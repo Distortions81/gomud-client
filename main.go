@@ -2,12 +2,12 @@ package main
 
 import (
 	"image/color"
+	"io/ioutil"
 	"log"
 	"strings"
 
 	"github.com/golang/freetype/truetype"
 	"github.com/hajimehoshi/ebiten"
-	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/inpututil"
 	"github.com/hajimehoshi/ebiten/text"
 	"golang.org/x/image/font"
@@ -15,6 +15,7 @@ import (
 
 var screenWidth = 1280
 var screenHeight = 720
+var ourFont []byte
 
 // repeatingKeyPressed return true when key is pressed considering the repeat state.
 func repeatingKeyPressed(key ebiten.Key) bool {
@@ -76,7 +77,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	//ebitenutil.DebugPrint(screen, t)
 
 	var mplusNormalFont font.Face
-	tt, err := truetype.Parse(fonts.MPlus1pRegular_ttf)
+	tt, err := truetype.Parse(ourFont)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -99,6 +100,13 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
+	var err error
+	ourFont, err = ioutil.ReadFile("unispace rg.ttf")
+	if err != nil {
+		log.Fatal(err)
+
+	}
+
 	g := &Game{
 		text:    "Type on the keyboard:\n",
 		counter: 0,
