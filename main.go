@@ -16,6 +16,7 @@ import (
 var screenWidth = 1280
 var screenHeight = 720
 var ourFont []byte
+var newFont font.Face
 
 // repeatingKeyPressed return true when key is pressed considering the repeat state.
 func repeatingKeyPressed(key ebiten.Key) bool {
@@ -46,7 +47,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 
 	// Adjust the string to be at most 10 lines.
 	ss := strings.Split(g.text, "\n")
-	numLines := screenHeight / 30
+	numLines := screenHeight / 35
 
 	if len(ss) > numLines {
 		g.text = strings.Join(ss[len(ss)-numLines:], "\n")
@@ -74,22 +75,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.counter%60 < 30 {
 		t += "_"
 	}
-	//ebitenutil.DebugPrint(screen, t)
 
-	var mplusNormalFont font.Face
-	tt, err := truetype.Parse(ourFont)
-	if err != nil {
-		log.Fatal(err)
+	lines := strings.Split(t, "\n")
+	for x, l := range lines {
+		text.Draw(screen, l, newFont, 0, 30+(x*36), color.White)
 	}
-
-	const dpi = 72
-	mplusNormalFont = truetype.NewFace(tt, &truetype.Options{
-		Size:    30,
-		DPI:     dpi,
-		Hinting: font.HintingFull,
-	})
-
-	text.Draw(screen, t, mplusNormalFont, 0, 30, color.White)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -106,14 +96,33 @@ func main() {
 		log.Fatal(err)
 
 	}
+	var greeting []byte
+	greeting, err = ioutil.ReadFile("greet.txt")
+	if err != nil {
+		log.Fatal(err)
+
+	}
+
+	tt, err := truetype.Parse(ourFont)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	const dpi = 72
+	newFont = truetype.NewFace(tt, &truetype.Options{
+		Size:              30,
+		DPI:               dpi,
+		Hinting:           font.HintingFull,
+		GlyphCacheEntries: 512,
+	})
 
 	g := &Game{
-		text:    "Type on the keyboard:\n",
+		text:    string(greeting),
 		counter: 0,
 	}
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)
-	ebiten.SetWindowTitle("TypeWriter (Ebiten Demo)")
+	ebiten.SetWindowTitle("gomud-client")
 	ebiten.SetWindowResizable(true)
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
