@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"io/ioutil"
 	"log"
@@ -12,6 +13,8 @@ import (
 	"github.com/hajimehoshi/ebiten/text"
 	"golang.org/x/image/font"
 )
+
+const VersionString = "Pre-Alpha build, v0.0.01 08162020-0909"
 
 //Greeting
 const DefaultGreetFile = "greet.txt"
@@ -179,8 +182,9 @@ func main() {
 		GlyphCacheEntries: glyphCacheSize,
 	})
 
+	greetString := fmt.Sprintf("%v\n%v\n", string(greeting), VersionString)
 	g := &Game{
-		text:    string(greeting),
+		text:    greetString,
 		counter: 0,
 	}
 
