@@ -43,6 +43,10 @@ type Window struct {
 
 	RepeatInterval int
 	RepeatDelay    int
+
+	Text       string
+	Tick       int
+	ScrollBack string
 }
 
 //Scroll
@@ -70,6 +74,11 @@ type FontData struct {
 var MainWin Window
 var ActiveWin *Window
 
+type Game struct {
+	text    string
+	counter int
+}
+
 // repeatingKeyPressed return true when key is pressed considering the repeat state.
 func repeatingKeyPressed(key ebiten.Key) bool {
 	d := inpututil.KeyPressDuration(key)
@@ -82,44 +91,41 @@ func repeatingKeyPressed(key ebiten.Key) bool {
 	return false
 }
 
-type Game struct {
-	text    string
-	counter int
-}
-
 func (g *Game) Update(screen *ebiten.Image) error {
 	// Add a string from InputChars, that returns string input by users.
 	// Note that InputChars result changes every frame, so you need to call this
 	// every frame.
-	g.text += string(ebiten.InputChars())
+	ActiveWin.ScrollBack += string(ebiten.InputChars())
 
 	// Adjust the string to be at most x lines.
-	ss := strings.Split(g.text, "\n")
+	ss := strings.Split(ActiveWin.ScrollBack, "\n")
 	numLines := ActiveWin.Height / (ActiveWin.Font.Size + ActiveWin.Font.VerticalSpace)
 
 	if len(ss) > numLines {
-		g.text = strings.Join(ss[len(ss)-numLines:], "\n")
+		ActiveWin.Text = strings.Join(ss[len(ss)-numLines:], "\n")
+	} else {
+		ActiveWin.Text = ActiveWin.ScrollBack
 	}
 
 	// If the enter key is pressed, add a line break.
 	if repeatingKeyPressed(ebiten.KeyEnter) || repeatingKeyPressed(ebiten.KeyKPEnter) {
-		g.text += "\n"
+		ActiveWin.ScrollBack += "\n"
 	}
 
 	// If the backspace key is pressed, remove one character.
 	if repeatingKeyPressed(ebiten.KeyBackspace) {
-		if len(g.text) >= 1 {
-			g.text = g.text[:len(g.text)-1]
+		if len(ActiveWin.ScrollBack) >= 1 {
+			ActiveWin.ScrollBack = ActiveWin.ScrollBack[:len(ActiveWin.ScrollBack)-1]
 		}
 	}
 
-	g.counter++
+	ActiveWin.Tick++
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	// Blink the cursor.
-	t := g.text
+	t := ActiveWin.Text
 	if g.counter%60 < 30 {
 		t += "_"
 	}
@@ -183,14 +189,17 @@ func main() {
 	})
 
 	greetString := fmt.Sprintf("%v\n%v\n", string(greeting), VersionString)
-	g := &Game{
-		text:    greetString,
-		counter: 0,
-	}
+	MainWin.ScrollBack = greetString
+	MainWin.Text = greetString
 
 	ebiten.SetWindowSize(MainWin.Width, MainWin.Height)
 	ebiten.SetWindowTitle(MainWin.Title)
 	ebiten.SetWindowResizable(true)
+
+	g := &Game{
+		counter: 0,
+	}
+
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
