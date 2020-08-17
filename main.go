@@ -1,11 +1,13 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"image/color"
 	"io/ioutil"
 	"log"
 	"math"
+	"os"
 	"strings"
 
 	"github.com/golang/freetype/truetype"
@@ -24,7 +26,7 @@ const DefaultGreetFile = "greet.txt"
 const DefaultWindowWidth = 640.0
 const DefaultWindowHeight = 360.0
 const DefaultWindowDPI = 72
-const DefaultMagnification = 2.33
+const DefaultMagnification = 2.25
 
 const DefaultRepeatInterval = 3
 const DefaultRepeatDelay = 60
@@ -49,6 +51,9 @@ type Window struct {
 	Text       string
 	Tick       int
 	ScrollBack string
+	InputLine  string
+
+	Con *tls.Conn
 }
 
 //Scroll
@@ -57,7 +62,7 @@ type ScrollData struct {
 }
 
 //Font
-const DefaultFontFile = "unispace rg.ttf"
+const DefaultFontFile = "unispacerg.ttf"
 const glyphCacheSize = 512
 const DefaultVerticalSpace = 3.0
 const DefaultFontSize = 12.0
@@ -81,6 +86,20 @@ type Game struct {
 	counter int
 }
 
+//No ASCII control characters
+func StripControl(str string) string {
+	b := make([]byte, len(str))
+	var bl int
+	for i := 0; i < len(str); i++ {
+		c := str[i]
+		if (c >= 32 && c < 255) || c == '\n' {
+			b[bl] = c
+			bl++
+		}
+	}
+	return string(b[:bl])
+}
+
 // repeatingKeyPressed return true when key is pressed considering the repeat state.
 func repeatingKeyPressed(key ebiten.Key) bool {
 	d := inpututil.KeyPressDuration(key)
@@ -93,33 +112,61 @@ func repeatingKeyPressed(key ebiten.Key) bool {
 	return false
 }
 
+func ReadInput() {
+	for {
+		buf := make([]byte, 131072)
+		n, err := ActiveWin.Con.Read(buf)
+		if err != nil {
+			log.Println(n, err)
+			ActiveWin.Con.Close()
+			os.Exit(0)
+		}
+		ActiveWin.ScrollBack += StripControl(string(buf[:n]))
+	}
+}
+
 func (g *Game) Update(screen *ebiten.Image) error {
 
-	//Add input
-	ActiveWin.ScrollBack += string(ebiten.InputChars())
+	//Add linebreaks
+	if repeatingKeyPressed(ebiten.KeyEnter) || repeatingKeyPressed(ebiten.KeyKPEnter) {
+		ActiveWin.InputLine += "\n"
+	}
+
+	//Backspace
+	if repeatingKeyPressed(ebiten.KeyBackspace) {
+		if len(ActiveWin.InputLine) >= 1 {
+			ActiveWin.InputLine = ActiveWin.InputLine[:len(ActiveWin.InputLine)-1]
+		}
+	}
+
+	if ActiveWin != nil && ActiveWin.Con != nil {
+
+		add := string(ebiten.InputChars())
+		ActiveWin.InputLine = ActiveWin.InputLine + add
+		ActiveWin.ScrollBack = ActiveWin.ScrollBack + add
+
+		if strings.HasSuffix(ActiveWin.InputLine, "\n") {
+			n, err := ActiveWin.Con.Write([]byte(ActiveWin.InputLine))
+			if err != nil {
+				log.Println(n, err)
+				os.Exit(0)
+			}
+			ActiveWin.InputLine = ""
+		}
+	} else {
+
+		fmt.Println("No connection.")
+	}
 
 	ss := strings.Split(ActiveWin.ScrollBack, "\n")
 
 	//Calculate lines that will fit in window height
 	numLines := ActiveWin.Height / (ActiveWin.Font.Size + ActiveWin.Font.VerticalSpace)
-
 	//Crop scrollback if needed
 	if len(ss) > numLines {
 		ActiveWin.Text = strings.Join(ss[len(ss)-numLines:], "\n")
 	} else {
 		ActiveWin.Text = ActiveWin.ScrollBack
-	}
-
-	//Add linebreaks
-	if repeatingKeyPressed(ebiten.KeyEnter) || repeatingKeyPressed(ebiten.KeyKPEnter) {
-		ActiveWin.ScrollBack += "\n"
-	}
-
-	//Backspace
-	if repeatingKeyPressed(ebiten.KeyBackspace) {
-		if len(ActiveWin.ScrollBack) >= 1 {
-			ActiveWin.ScrollBack = ActiveWin.ScrollBack[:len(ActiveWin.ScrollBack)-1]
-		}
 	}
 
 	ActiveWin.Tick++
@@ -199,6 +246,9 @@ func main() {
 	ebiten.SetWindowTitle(MainWin.Title)
 	ebiten.SetWindowResizable(true)
 
+	DialSSL()
+	go ReadInput()
+
 	g := &Game{
 		counter: 0,
 	}
@@ -206,4 +256,19 @@ func main() {
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)
 	}
+
+}
+
+func DialSSL() {
+
+	conf := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+
+	conn, err := tls.Dial("tcp", "bhmm.net:7778", conf)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	ActiveWin.Con = conn
 }
