@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"./support"
 
@@ -31,7 +32,7 @@ const DefaultWindowWidth = 640.0
 const DefaultWindowHeight = 360.0
 
 const DefaultRepeatInterval = 3
-const DefaultRepeatDelay = 15
+const DefaultRepeatDelay = 30
 
 const DefaultWindowTitle = "GoMud-Client"
 
@@ -137,6 +138,7 @@ func ReadInput() {
 			updateScroll()
 			ActiveWin.Lock.Unlock()
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -147,31 +149,22 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	defer ActiveWin.Lock.Unlock()
 
 	//Increase mag
-	if repeatingKeyPressed(ebiten.KeyEqual) {
+	if repeatingKeyPressed(ebiten.KeyEqual) && ebiten.IsKeyPressed(ebiten.KeyControl) {
 		ActiveWin.UserScale = ActiveWin.UserScale + 0.15
+		ActiveWin.Update = true
 		adjustScale()
 		updateScroll()
-		ActiveWin.Update = true
 		return nil
-	}
-
-	//Decrease mag
-	if repeatingKeyPressed(ebiten.KeyMinus) {
+	} else if repeatingKeyPressed(ebiten.KeyMinus) && ebiten.IsKeyPressed(ebiten.KeyControl) {
 		ActiveWin.UserScale = ActiveWin.UserScale - 0.15
+		ActiveWin.Update = true
 		adjustScale()
 		updateScroll()
-		ActiveWin.Update = true
 		return nil
-	}
-
-	//Add linebreaks
-	if repeatingKeyPressed(ebiten.KeyEnter) || repeatingKeyPressed(ebiten.KeyKPEnter) {
+	} else if repeatingKeyPressed(ebiten.KeyEnter) || repeatingKeyPressed(ebiten.KeyKPEnter) {
 		ActiveWin.InputLine += "\n"
 		keyPressed = true
-	}
-
-	//Backspace
-	if repeatingKeyPressed(ebiten.KeyBackspace) {
+	} else if repeatingKeyPressed(ebiten.KeyBackspace) {
 		if len(ActiveWin.InputLine) >= 1 {
 			ActiveWin.InputLine = ActiveWin.InputLine[:len(ActiveWin.InputLine)-1]
 			ActiveWin.ScrollBack = ActiveWin.ScrollBack[:len(ActiveWin.ScrollBack)-1]
@@ -179,7 +172,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		}
 	}
 	newChars := string(ebiten.InputChars())
-	if ActiveWin != nil && ActiveWin.Con != nil {
+	if ActiveWin != nil && ActiveWin.Con != nil && (newChars != "" || keyPressed) {
 
 		if newChars != "" || keyPressed {
 			ActiveWin.Update = true
@@ -197,11 +190,8 @@ func (g *Game) Update(screen *ebiten.Image) error {
 			}
 			updateScroll()
 		}
-	} else {
-
-		fmt.Println("No connection.")
 	}
-	ActiveWin.Tick++
+	g.counter++
 	return nil
 }
 
@@ -282,9 +272,9 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	// The unit of outsideWidth/Height is device-independent pixels.
 	// By multiplying them by the device scale factor, we can get a hi-DPI screen size.
 
-	s := ebiten.DeviceScaleFactor()
-	NewWidth := int(math.Round(float64(outsideWidth) * s))
-	NewHeight := int(math.Round(float64(outsideHeight) * s))
+	//s := ebiten.DeviceScaleFactor()
+	NewWidth := int(math.Round(float64(outsideWidth) * ActiveWin.Scale))
+	NewHeight := int(math.Round(float64(outsideHeight) * ActiveWin.Scale))
 
 	if NewWidth != ActiveWin.Width || NewHeight != ActiveWin.Height {
 		ActiveWin.Lock.Lock()
@@ -292,6 +282,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 		adjustScale()
 		updateScroll()
+		ActiveWin.Scale = ebiten.DeviceScaleFactor()
 		ActiveWin.Update = true
 	}
 
@@ -299,12 +290,11 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func adjustScale() {
-
-	ActiveWin.Title = DefaultWindowTitle
 	x, y := ebiten.WindowSize()
 	ActiveWin.Width = x
 	ActiveWin.Height = y
 
+	ActiveWin.Title = DefaultWindowTitle
 	ActiveWin.Font.VerticalSpace = DefaultVerticalSpace * ActiveWin.Scale * ActiveWin.UserScale
 	ActiveWin.Font.Size = DefaultFontSize * ActiveWin.Scale * ActiveWin.UserScale
 
@@ -374,10 +364,10 @@ func main() {
 	ebiten.SetWindowSize(ActiveWin.Width, ActiveWin.Height)
 	ebiten.SetWindowTitle(ActiveWin.Title)
 	ebiten.SetWindowResizable(true)
-	ebiten.SetVsyncEnabled(true)
-	ebiten.SetMaxTPS(60)
+	ebiten.SetVsyncEnabled(false)
+	ebiten.SetMaxTPS(30)
 	ebiten.SetRunnableOnUnfocused(true)
-	ebiten.SetRunnableInBackground(false)
+	ebiten.SetRunnableInBackground(true)
 
 	ActiveWin.FrameBuffer, _ = ebiten.NewImage(
 		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale*ActiveWin.UserScale)),
