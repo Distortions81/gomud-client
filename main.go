@@ -28,8 +28,6 @@ const DefaultGreetFile = "greet.txt"
 //Window
 const DefaultWindowWidth = 640.0
 const DefaultWindowHeight = 360.0
-const DefaultWindowDPI = 72
-const DefaultMagnification = 1.0
 
 const DefaultRepeatInterval = 3
 const DefaultRepeatDelay = 60
@@ -92,20 +90,6 @@ var tt *truetype.Font
 
 type Game struct {
 	counter int
-}
-
-//No ASCII control characters
-func StripControl(str string) string {
-	b := make([]byte, len(str))
-	var bl int
-	for i := 0; i < len(str); i++ {
-		c := str[i]
-		if (c >= 32 && c < 255) || c == '\n' {
-			b[bl] = c
-			bl++
-		}
-	}
-	return string(b[:bl])
 }
 
 // repeatingKeyPressed return true when key is pressed considering the repeat state.
@@ -211,13 +195,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 
 //Eventually optimize, don't re-calc draws each time, just store and offset
 func (g *Game) Draw(screen *ebiten.Image) {
-
-	// Blink the cursor.
 	t := ActiveWin.Text
-	//if ActiveWin.Tick%60 < 30 {
-	//t += "_"
-	//ActiveWin.Update = true
-	//}
 
 	if ActiveWin.Update {
 		ActiveWin.Update = false
@@ -256,7 +234,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		tLen := len(t)
 		y := 0
 		x := 0
-		ActiveWin.FrameBuffer.Clear()
+		err := ActiveWin.FrameBuffer.Clear()
+		if err != nil {
+			log.Fatal(err)
+		}
 		for c := 0; c < tLen; c++ {
 			if t[c] == '\n' {
 				y = 0
@@ -276,14 +257,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			}
 		}
 	}
-	screen.DrawImage(ActiveWin.FrameBuffer, nil)
+	err := screen.DrawImage(ActiveWin.FrameBuffer, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	x, y := ebiten.WindowSize()
-	ActiveWin.Height = y
-	ActiveWin.Width = x
-	return x, y
+	// The unit of outsideWidth/Height is device-independent pixels.
+	// By multiplying them by the device scale factor, we can get a hi-DPI screen size.
+	s := ebiten.DeviceScaleFactor()
+	fmt.Println(fmt.Sprintf("Scale %v", s))
+	return int(float64(outsideWidth) * s), int(float64(outsideHeight) * s)
 }
 
 func adjustScale() {
