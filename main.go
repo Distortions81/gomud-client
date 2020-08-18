@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 
+	"./support"
+
 	"github.com/golang/freetype/truetype"
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/inpututil"
@@ -18,6 +20,7 @@ import (
 )
 
 const VersionString = "Pre-Alpha build, v0.0.01 08162020-0909"
+const MAX_STRING_LENGTH = 1024 * 10
 
 //Greeting
 const DefaultGreetFile = "greet.txt"
@@ -65,6 +68,7 @@ type ScrollData struct {
 const DefaultFontFile = "unispacerg.ttf"
 const glyphCacheSize = 512
 const DefaultVerticalSpace = 3.0
+const HorizontalSpaceRatio = 1.66666666667
 const DefaultFontSize = 12.0
 const LeftMargin = 4.0
 
@@ -114,14 +118,14 @@ func repeatingKeyPressed(key ebiten.Key) bool {
 
 func ReadInput() {
 	for {
-		buf := make([]byte, 131072)
+		buf := make([]byte, MAX_STRING_LENGTH)
 		n, err := ActiveWin.Con.Read(buf)
 		if err != nil {
 			log.Println(n, err)
 			ActiveWin.Con.Close()
 			os.Exit(0)
 		}
-		ActiveWin.ScrollBack += StripControl(string(buf[:n]))
+		ActiveWin.ScrollBack += string(buf[:n])
 	}
 }
 
@@ -173,6 +177,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	return nil
 }
 
+//Eventually optimize, don't re-calc draws each time, just store and offset
 func (g *Game) Draw(screen *ebiten.Image) {
 	// Blink the cursor.
 	t := ActiveWin.Text
@@ -180,12 +185,60 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		t += "_"
 	}
 
-	lines := strings.Split(t, "\n")
-	for x, l := range lines {
-		text.Draw(screen, l, ActiveWin.Font.Face, LeftMargin, ActiveWin.Font.Size+(x*(ActiveWin.Font.Size+ActiveWin.Font.VerticalSpace)), color.White)
-	}
-}
+	textLen := len(t)
+	foundColor := false
+	colorStart := 0
+	colorEnd := 0
+	drawColor := support.ANSI_DEFAULT
+	var textColors [MAX_STRING_LENGTH]support.ANSIData
 
+	for z := 0; z < textLen; z++ {
+		if t[z] == '\033' {
+			foundColor = true
+			colorStart = z
+			textColors[z] = support.ANSI_CONTROL
+			continue
+		} else if foundColor && t[z] == 'm' {
+			colorEnd = z
+			foundColor = false
+			if z+1 < textLen {
+				drawColor = support.DecodeANSI(t[colorStart : colorEnd+1])
+				textColors[z+1] = drawColor
+			}
+			textColors[z] = support.ANSI_CONTROL
+			continue
+		}
+		if foundColor {
+			textColors[z] = support.ANSI_CONTROL
+		} else {
+			textColors[z] = drawColor
+		}
+	}
+
+	charWidth := int(math.Round(float64(ActiveWin.Font.Size) / float64(HorizontalSpaceRatio)))
+	tLen := len(t)
+	y := 0
+	x := 0
+	for c := 0; c < tLen; c++ {
+		if t[c] == '\n' {
+			y = 0
+			x++
+			continue
+		}
+		if t[c] >= 32 && t[c] < 255 {
+			if textColors[c] != support.ANSI_CONTROL {
+				charColor := color.RGBA64{textColors[c].Red, textColors[c].Green, textColors[c].Blue, 0xFFFF}
+				text.Draw(screen, string(t[c]),
+					ActiveWin.Font.Face,
+					LeftMargin+charWidth+(y*charWidth),
+					ActiveWin.Font.Size+(x*(ActiveWin.Font.Size+ActiveWin.Font.VerticalSpace)),
+					charColor)
+				y++
+			}
+		}
+	}
+
+}
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	x, y := ebiten.WindowSize()
 	ActiveWin.Height = y
