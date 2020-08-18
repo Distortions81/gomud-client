@@ -41,9 +41,10 @@ type Window struct {
 	FrameBuffer *ebiten.Image
 	Lock        sync.Mutex
 
-	Width  int
-	Height int
-	Scale  float64
+	Width     int
+	Height    int
+	Scale     float64
+	UserScale float64
 
 	TextLines   int
 	TextColumns int
@@ -147,17 +148,19 @@ func (g *Game) Update(screen *ebiten.Image) error {
 
 	//Increase mag
 	if repeatingKeyPressed(ebiten.KeyEqual) {
-		ActiveWin.Scale = ActiveWin.Scale + 0.15
+		ActiveWin.UserScale = ActiveWin.UserScale + 0.15
 		adjustScale()
 		updateScroll()
+		ActiveWin.Update = true
 		return nil
 	}
 
 	//Decrease mag
 	if repeatingKeyPressed(ebiten.KeyMinus) {
-		ActiveWin.Scale = ActiveWin.Scale - 0.15
+		ActiveWin.UserScale = ActiveWin.UserScale - 0.15
 		adjustScale()
 		updateScroll()
+		ActiveWin.Update = true
 		return nil
 	}
 
@@ -302,8 +305,8 @@ func adjustScale() {
 	ActiveWin.Width = x
 	ActiveWin.Height = y
 
-	ActiveWin.Font.VerticalSpace = DefaultVerticalSpace * ActiveWin.Scale
-	ActiveWin.Font.Size = DefaultFontSize * ActiveWin.Scale
+	ActiveWin.Font.VerticalSpace = DefaultVerticalSpace * ActiveWin.Scale * ActiveWin.UserScale
+	ActiveWin.Font.Size = DefaultFontSize * ActiveWin.Scale * ActiveWin.UserScale
 
 	//Init font
 	ActiveWin.Font.Face = truetype.NewFace(tt, &truetype.Options{
@@ -313,8 +316,8 @@ func adjustScale() {
 	})
 
 	ActiveWin.FrameBuffer, _ = ebiten.NewImage(
-		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale)),
-		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale)),
+		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale*ActiveWin.UserScale)),
+		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale*ActiveWin.UserScale)),
 		ebiten.FilterNearest)
 }
 
@@ -345,12 +348,13 @@ func main() {
 	ActiveWin = &MainWin
 	//Load window defaults
 	ActiveWin.Title = DefaultWindowTitle
+	ActiveWin.UserScale = 1.0
 	ActiveWin.Scale = ebiten.DeviceScaleFactor()
 	ActiveWin.Width = DefaultWindowWidth
 	ActiveWin.Height = DefaultWindowHeight
 
 	ActiveWin.Font.VerticalSpace = DefaultVerticalSpace
-	ActiveWin.Font.Size = DefaultFontSize * ActiveWin.Scale
+	ActiveWin.Font.Size = DefaultFontSize * ActiveWin.Scale * ActiveWin.UserScale
 
 	ActiveWin.RepeatDelay = DefaultRepeatDelay
 	ActiveWin.RepeatInterval = DefaultRepeatInterval
@@ -376,8 +380,8 @@ func main() {
 	ebiten.SetRunnableInBackground(false)
 
 	ActiveWin.FrameBuffer, _ = ebiten.NewImage(
-		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale)),
-		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale)),
+		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale*ActiveWin.UserScale)),
+		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale*ActiveWin.UserScale)),
 		ebiten.FilterNearest)
 
 	adjustScale()
