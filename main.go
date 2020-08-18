@@ -29,7 +29,7 @@ const DefaultGreetFile = "greet.txt"
 const DefaultWindowWidth = 640.0
 const DefaultWindowHeight = 360.0
 const DefaultWindowDPI = 72
-const DefaultMagnification = 2.25
+const DefaultMagnification = 1.0
 
 const DefaultRepeatInterval = 3
 const DefaultRepeatDelay = 60
@@ -37,10 +37,13 @@ const DefaultRepeatDelay = 60
 const DefaultWindowTitle = "GoMud-Client"
 
 type Window struct {
-	Title  string
+	Title       string
+	Update      bool
+	FrameBuffer *ebiten.Image
+
 	Width  int
 	Height int
-	DPI    int
+	Scale  float64
 
 	TextLines   int
 	TextColumns int
@@ -85,6 +88,7 @@ type FontData struct {
 //Data
 var MainWin Window
 var ActiveWin *Window
+var tt *truetype.Font
 
 type Game struct {
 	counter int
@@ -116,52 +120,7 @@ func repeatingKeyPressed(key ebiten.Key) bool {
 	return false
 }
 
-func ReadInput() {
-	for {
-		buf := make([]byte, MAX_STRING_LENGTH)
-		n, err := ActiveWin.Con.Read(buf)
-		if err != nil {
-			log.Println(n, err)
-			ActiveWin.Con.Close()
-			os.Exit(0)
-		}
-		ActiveWin.ScrollBack += string(buf[:n])
-	}
-}
-
-func (g *Game) Update(screen *ebiten.Image) error {
-
-	//Add linebreaks
-	if repeatingKeyPressed(ebiten.KeyEnter) || repeatingKeyPressed(ebiten.KeyKPEnter) {
-		ActiveWin.InputLine += "\n"
-	}
-
-	//Backspace
-	if repeatingKeyPressed(ebiten.KeyBackspace) {
-		if len(ActiveWin.InputLine) >= 1 {
-			ActiveWin.InputLine = ActiveWin.InputLine[:len(ActiveWin.InputLine)-1]
-		}
-	}
-
-	if ActiveWin != nil && ActiveWin.Con != nil {
-
-		add := string(ebiten.InputChars())
-		ActiveWin.InputLine = ActiveWin.InputLine + add
-		ActiveWin.ScrollBack = ActiveWin.ScrollBack + add
-
-		if strings.HasSuffix(ActiveWin.InputLine, "\n") {
-			n, err := ActiveWin.Con.Write([]byte(ActiveWin.InputLine))
-			if err != nil {
-				log.Println(n, err)
-				os.Exit(0)
-			}
-			ActiveWin.InputLine = ""
-		}
-	} else {
-
-		fmt.Println("No connection.")
-	}
-
+func updateScroll() {
 	ss := strings.Split(ActiveWin.ScrollBack, "\n")
 
 	//Calculate lines that will fit in window height
@@ -172,78 +131,178 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	} else {
 		ActiveWin.Text = ActiveWin.ScrollBack
 	}
+}
 
+func ReadInput() {
+	for {
+		buf := make([]byte, MAX_STRING_LENGTH)
+		n, err := ActiveWin.Con.Read(buf)
+		if err != nil {
+			log.Println(n, err)
+			ActiveWin.Con.Close()
+			os.Exit(0)
+		}
+		newData := string(buf[:n])
+		if newData != "" {
+			ActiveWin.Update = true
+			ActiveWin.ScrollBack += newData
+			updateScroll()
+		}
+	}
+}
+
+func (g *Game) Update(screen *ebiten.Image) error {
+	keyPressed := false
+
+	//Increase mag
+	if repeatingKeyPressed(ebiten.KeyEqual) {
+		ActiveWin.Scale = ActiveWin.Scale + 0.15
+		adjustScale()
+		return nil
+	}
+
+	//Decrease mag
+	if repeatingKeyPressed(ebiten.KeyMinus) {
+		ActiveWin.Scale = ActiveWin.Scale - 0.15
+		adjustScale()
+		return nil
+	}
+
+	//Add linebreaks
+	if repeatingKeyPressed(ebiten.KeyEnter) || repeatingKeyPressed(ebiten.KeyKPEnter) {
+		ActiveWin.InputLine += "\n"
+		keyPressed = true
+	}
+
+	//Backspace
+	if repeatingKeyPressed(ebiten.KeyBackspace) {
+		if len(ActiveWin.InputLine) >= 1 {
+			ActiveWin.InputLine = ActiveWin.InputLine[:len(ActiveWin.InputLine)-1]
+			ActiveWin.ScrollBack = ActiveWin.ScrollBack[:len(ActiveWin.ScrollBack)-1]
+			keyPressed = true
+		}
+	}
+	newChars := string(ebiten.InputChars())
+	if ActiveWin != nil && ActiveWin.Con != nil {
+
+		if newChars != "" || keyPressed {
+			ActiveWin.Update = true
+			add := newChars
+			ActiveWin.InputLine = ActiveWin.InputLine + add
+			ActiveWin.ScrollBack = ActiveWin.ScrollBack + add
+
+			if strings.HasSuffix(ActiveWin.InputLine, "\n") {
+				n, err := ActiveWin.Con.Write([]byte(ActiveWin.InputLine))
+				if err != nil {
+					log.Println(n, err)
+					os.Exit(0)
+				}
+				ActiveWin.InputLine = ""
+			}
+			updateScroll()
+		}
+	} else {
+
+		fmt.Println("No connection.")
+	}
 	ActiveWin.Tick++
 	return nil
 }
 
 //Eventually optimize, don't re-calc draws each time, just store and offset
 func (g *Game) Draw(screen *ebiten.Image) {
+
 	// Blink the cursor.
 	t := ActiveWin.Text
-	if ActiveWin.Tick%60 < 30 {
-		t += "_"
-	}
+	//if ActiveWin.Tick%60 < 30 {
+	//t += "_"
+	//ActiveWin.Update = true
+	//}
 
-	textLen := len(t)
-	foundColor := false
-	colorStart := 0
-	colorEnd := 0
-	drawColor := support.ANSI_DEFAULT
-	var textColors [MAX_STRING_LENGTH]support.ANSIData
+	if ActiveWin.Update {
+		ActiveWin.Update = false
 
-	for z := 0; z < textLen; z++ {
-		if t[z] == '\033' {
-			foundColor = true
-			colorStart = z
-			textColors[z] = support.ANSI_CONTROL
-			continue
-		} else if foundColor && t[z] == 'm' {
-			colorEnd = z
-			foundColor = false
-			if z+1 < textLen {
-				drawColor = support.DecodeANSI(t[colorStart : colorEnd+1])
-				textColors[z+1] = drawColor
+		textLen := len(t)
+		foundColor := false
+		colorStart := 0
+		colorEnd := 0
+		drawColor := support.ANSI_DEFAULT
+		var textColors [MAX_STRING_LENGTH]support.ANSIData
+
+		for z := 0; z < textLen; z++ {
+			if t[z] == '\033' {
+				foundColor = true
+				colorStart = z
+				textColors[z] = support.ANSI_CONTROL
+				continue
+			} else if foundColor && t[z] == 'm' {
+				colorEnd = z
+				foundColor = false
+				if z+1 < textLen {
+					drawColor = support.DecodeANSI(t[colorStart : colorEnd+1])
+					textColors[z+1] = drawColor
+				}
+				textColors[z] = support.ANSI_CONTROL
+				continue
 			}
-			textColors[z] = support.ANSI_CONTROL
-			continue
-		}
-		if foundColor {
-			textColors[z] = support.ANSI_CONTROL
-		} else {
-			textColors[z] = drawColor
-		}
-	}
-
-	charWidth := int(math.Round(float64(ActiveWin.Font.Size) / float64(HorizontalSpaceRatio)))
-	tLen := len(t)
-	y := 0
-	x := 0
-	for c := 0; c < tLen; c++ {
-		if t[c] == '\n' {
-			y = 0
-			x++
-			continue
-		}
-		if t[c] >= 32 && t[c] < 255 {
-			if textColors[c] != support.ANSI_CONTROL {
-				charColor := color.RGBA64{textColors[c].Red, textColors[c].Green, textColors[c].Blue, 0xFFFF}
-				text.Draw(screen, string(t[c]),
-					ActiveWin.Font.Face,
-					LeftMargin+charWidth+(y*charWidth),
-					ActiveWin.Font.Size+(x*(ActiveWin.Font.Size+ActiveWin.Font.VerticalSpace)),
-					charColor)
-				y++
+			if foundColor {
+				textColors[z] = support.ANSI_CONTROL
+			} else {
+				textColors[z] = drawColor
 			}
 		}
-	}
 
+		charWidth := int(math.Round(float64(ActiveWin.Font.Size) / float64(HorizontalSpaceRatio)))
+		tLen := len(t)
+		y := 0
+		x := 0
+		ActiveWin.FrameBuffer.Clear()
+		for c := 0; c < tLen; c++ {
+			if t[c] == '\n' {
+				y = 0
+				x++
+				continue
+			}
+			if t[c] >= 32 && t[c] < 255 {
+				if textColors[c] != support.ANSI_CONTROL {
+					charColor := color.RGBA64{textColors[c].Red, textColors[c].Green, textColors[c].Blue, 0xFFFF}
+					text.Draw(ActiveWin.FrameBuffer, string(t[c]),
+						ActiveWin.Font.Face,
+						LeftMargin+charWidth+(y*charWidth),
+						ActiveWin.Font.Size+(x*(ActiveWin.Font.Size+ActiveWin.Font.VerticalSpace)),
+						charColor)
+					y++
+				}
+			}
+		}
+	}
+	screen.DrawImage(ActiveWin.FrameBuffer, nil)
 }
+
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	x, y := ebiten.WindowSize()
 	ActiveWin.Height = y
 	ActiveWin.Width = x
 	return x, y
+}
+
+func adjustScale() {
+
+	ActiveWin.Title = DefaultWindowTitle
+	ActiveWin.Width = int(math.Round(DefaultWindowWidth * ActiveWin.Scale))
+	ActiveWin.Height = int(math.Round(DefaultWindowHeight * ActiveWin.Scale))
+
+	ActiveWin.Font.VerticalSpace = int(math.Round(DefaultVerticalSpace * ActiveWin.Scale))
+	ActiveWin.Font.Size = int(math.Round(DefaultFontSize * ActiveWin.Scale))
+
+	//Init font
+	ActiveWin.Font.Face = truetype.NewFace(tt, &truetype.Options{
+		Size:              float64(ActiveWin.Font.Size),
+		Hinting:           font.HintingFull,
+		GlyphCacheEntries: glyphCacheSize,
+	})
+
+	ActiveWin.FrameBuffer, _ = ebiten.NewImage(ActiveWin.Width, ActiveWin.Height, ebiten.FilterNearest)
 }
 
 func main() {
@@ -265,39 +324,41 @@ func main() {
 	}
 
 	//Load font
-	tt, err := truetype.Parse(MainWin.Font.Data)
+	tt, err = truetype.Parse(MainWin.Font.Data)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	//Load window defaults
-	MainWin.Title = DefaultWindowTitle
-	MainWin.Width = int(math.Round(DefaultWindowWidth * DefaultMagnification))
-	MainWin.Height = int(math.Round(DefaultWindowHeight * DefaultMagnification))
-	MainWin.DPI = DefaultWindowDPI
-
-	MainWin.Font.VerticalSpace = int(math.Round(DefaultVerticalSpace * DefaultMagnification))
-	MainWin.Font.Size = int(math.Round(DefaultFontSize * DefaultMagnification))
-
-	MainWin.RepeatDelay = DefaultRepeatDelay
-	MainWin.RepeatInterval = DefaultRepeatInterval
 	ActiveWin = &MainWin
+	//Load window defaults
+	ActiveWin.Title = DefaultWindowTitle
+	ActiveWin.Scale = ebiten.DeviceScaleFactor() * 2.0
+	ActiveWin.Width = int(math.Round(DefaultWindowWidth * ActiveWin.Scale))
+	ActiveWin.Height = int(math.Round(DefaultWindowHeight * ActiveWin.Scale))
+
+	ActiveWin.Font.VerticalSpace = int(math.Round(DefaultVerticalSpace * ActiveWin.Scale))
+	ActiveWin.Font.Size = int(math.Round(DefaultFontSize * ActiveWin.Scale))
+
+	ActiveWin.RepeatDelay = DefaultRepeatDelay
+	ActiveWin.RepeatInterval = DefaultRepeatInterval
 
 	//Init font
-	MainWin.Font.Face = truetype.NewFace(tt, &truetype.Options{
-		Size:              float64(MainWin.Font.Size),
-		DPI:               float64(MainWin.DPI),
+	ActiveWin.Font.Face = truetype.NewFace(tt, &truetype.Options{
+		Size:              float64(ActiveWin.Font.Size),
 		Hinting:           font.HintingFull,
 		GlyphCacheEntries: glyphCacheSize,
 	})
 
 	greetString := fmt.Sprintf("%v\n%v\n", string(greeting), VersionString)
-	MainWin.ScrollBack = greetString
-	MainWin.Text = greetString
+	ActiveWin.ScrollBack = greetString
+	ActiveWin.Text = greetString
 
-	ebiten.SetWindowSize(MainWin.Width, MainWin.Height)
-	ebiten.SetWindowTitle(MainWin.Title)
+	ebiten.SetWindowSize(ActiveWin.Width, ActiveWin.Height)
+	ebiten.SetWindowTitle(ActiveWin.Title)
 	ebiten.SetWindowResizable(true)
+	ebiten.SetVsyncEnabled(true)
+	ebiten.SetMaxTPS(30)
+	ActiveWin.FrameBuffer, _ = ebiten.NewImage(ActiveWin.Width, ActiveWin.Height, ebiten.FilterNearest)
 
 	DialSSL()
 	go ReadInput()
