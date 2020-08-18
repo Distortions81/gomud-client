@@ -33,9 +33,9 @@ var ANSI_YELLOW = ANSIData{Red: 0x7FFF, Green: 0x7FFF}
 var ANSI_BLUE = ANSIData{Blue: 0x7FFF}
 var ANSI_MAGENTA = ANSIData{Red: 0x7FFF, Blue: 0x7FFF}
 var ANSI_CYAN = ANSIData{Green: 0x7FFF, Blue: 0x7FFF}
-var ANSI_GRAY = ANSIData{Red: 0x7FFF, Green: 0x7FFF, Blue: 0x7FFF}
+var ANSI_GRAY = ANSIData{Red: 0xAAAA, Green: 0xAAAA, Blue: 0xAAAA}
 
-var ANSI_LGRAY = ANSIData{Red: 0xAAAA, Green: 0xAAAA, Blue: 0xAAAA}
+var ANSI_LGRAY = ANSIData{Red: 0x7FFF, Green: 0x7FFF, Blue: 0x7FFF}
 var ANSI_LRED = ANSIData{Red: 0xFFFF}
 var ANSI_LGREEN = ANSIData{Green: 0xFFFF}
 var ANSI_LYELLOW = ANSIData{Red: 0xFFFF, Green: 0xFFFF}
