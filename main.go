@@ -112,7 +112,7 @@ func updateScroll() {
 	ss := strings.Split(ActiveWin.ScrollBack, "\n")
 
 	//Calculate lines that will fit in window height
-	numLines := int(math.Round(float64(ActiveWin.Height)) / (float64(ActiveWin.Font.Size + ActiveWin.Font.VerticalSpace)) * ActiveWin.Scale)
+	numLines := int((float64(ActiveWin.Height)) / (ActiveWin.Font.Size + ActiveWin.Font.VerticalSpace) * ActiveWin.Scale)
 	//Crop scrollback if needed
 	if len(ss) > numLines {
 		ActiveWin.Text = strings.Join(ss[len(ss)-numLines:], "\n")
@@ -143,6 +143,8 @@ func ReadInput() {
 }
 
 func (g *Game) Update(screen *ebiten.Image) error {
+	startTime := time.Now()
+
 	keyPressed := false
 
 	ActiveWin.Lock.Lock()
@@ -192,17 +194,25 @@ func (g *Game) Update(screen *ebiten.Image) error {
 		}
 	}
 	g.counter++
+
+	since := time.Since(startTime).Nanoseconds()
+	time.Sleep(time.Duration(16666666-since) * time.Nanosecond)
 	return nil
 }
 
 //Eventually optimize, don't re-calc draws each time, just store and offset
 func (g *Game) Draw(screen *ebiten.Image) {
-	t := ActiveWin.Text
-	ActiveWin.Lock.Lock()
-	defer ActiveWin.Lock.Unlock()
 
+	startTime := time.Now()
 	if ActiveWin.Update {
+
+		ActiveWin.Lock.Lock()
+		defer ActiveWin.Lock.Unlock()
+
+		t := ActiveWin.Text
+
 		screen.Clear()
+
 		ActiveWin.Update = false
 
 		textLen := len(t)
@@ -218,6 +228,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				colorStart = z
 				textColors[z] = support.ANSI_CONTROL
 				continue
+			} else if z-colorStart > 10 {
+				foundColor = false
 			} else if foundColor && t[z] == 'm' {
 				colorEnd = z
 				foundColor = false
@@ -266,13 +278,13 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			log.Fatal(err)
 		}
 	}
+
+	since := time.Since(startTime).Nanoseconds()
+	time.Sleep(time.Duration(16666666-since) * time.Nanosecond)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	// The unit of outsideWidth/Height is device-independent pixels.
-	// By multiplying them by the device scale factor, we can get a hi-DPI screen size.
 
-	//s := ebiten.DeviceScaleFactor()
 	NewWidth := int(math.Round(float64(outsideWidth) * ActiveWin.Scale))
 	NewHeight := int(math.Round(float64(outsideHeight) * ActiveWin.Scale))
 
@@ -338,10 +350,10 @@ func main() {
 	ActiveWin = &MainWin
 	//Load window defaults
 	ActiveWin.Title = DefaultWindowTitle
-	ActiveWin.UserScale = 1.0
+	ActiveWin.UserScale = 2.0
 	ActiveWin.Scale = ebiten.DeviceScaleFactor()
-	ActiveWin.Width = DefaultWindowWidth
-	ActiveWin.Height = DefaultWindowHeight
+	ActiveWin.Width = int(float64(DefaultWindowWidth) * ActiveWin.UserScale)
+	ActiveWin.Height = int(float64(DefaultWindowHeight) * ActiveWin.UserScale)
 
 	ActiveWin.Font.VerticalSpace = DefaultVerticalSpace
 	ActiveWin.Font.Size = DefaultFontSize * ActiveWin.Scale * ActiveWin.UserScale
