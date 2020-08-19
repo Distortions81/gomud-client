@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"strings"
+	"sync"
 
 	"./support"
 
@@ -30,7 +31,7 @@ const DefaultWindowWidth = 640.0
 const DefaultWindowHeight = 360.0
 
 const DefaultRepeatInterval = 3
-const DefaultRepeatDelay = 60
+const DefaultRepeatDelay = 15
 
 const DefaultWindowTitle = "GoMud-Client"
 
@@ -38,6 +39,7 @@ type Window struct {
 	Title       string
 	Update      bool
 	FrameBuffer *ebiten.Image
+	Lock        sync.Mutex
 
 	Width  int
 	Height int
@@ -67,15 +69,15 @@ type ScrollData struct {
 
 //Font
 const DefaultFontFile = "unispacerg.ttf"
-const glyphCacheSize = 512
-const DefaultVerticalSpace = 3.0
-const HorizontalSpaceRatio = 1.66666666667
+const glyphCacheSize = 256
+const DefaultVerticalSpace = 4.0
+const HorizontalSpaceRatio = 1.5
 const DefaultFontSize = 12.0
-const LeftMargin = 4.0
+const LeftMargin = 6.0
 
 type FontData struct {
-	VerticalSpace int
-	Size          int
+	VerticalSpace float64
+	Size          float64
 	Data          []byte
 	Face          font.Face
 
@@ -108,7 +110,7 @@ func updateScroll() {
 	ss := strings.Split(ActiveWin.ScrollBack, "\n")
 
 	//Calculate lines that will fit in window height
-	numLines := ActiveWin.Height / (ActiveWin.Font.Size + ActiveWin.Font.VerticalSpace)
+	numLines := int(math.Round(float64(ActiveWin.Height)) / (float64(ActiveWin.Font.Size + ActiveWin.Font.VerticalSpace)) * ActiveWin.Scale)
 	//Crop scrollback if needed
 	if len(ss) > numLines {
 		ActiveWin.Text = strings.Join(ss[len(ss)-numLines:], "\n")
@@ -128,9 +130,11 @@ func ReadInput() {
 		}
 		newData := string(buf[:n])
 		if newData != "" {
+			ActiveWin.Lock.Lock()
 			ActiveWin.Update = true
 			ActiveWin.ScrollBack += newData
 			updateScroll()
+			ActiveWin.Lock.Unlock()
 		}
 	}
 }
@@ -138,10 +142,14 @@ func ReadInput() {
 func (g *Game) Update(screen *ebiten.Image) error {
 	keyPressed := false
 
+	ActiveWin.Lock.Lock()
+	defer ActiveWin.Lock.Unlock()
+
 	//Increase mag
 	if repeatingKeyPressed(ebiten.KeyEqual) {
 		ActiveWin.Scale = ActiveWin.Scale + 0.15
 		adjustScale()
+		updateScroll()
 		return nil
 	}
 
@@ -149,6 +157,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 	if repeatingKeyPressed(ebiten.KeyMinus) {
 		ActiveWin.Scale = ActiveWin.Scale - 0.15
 		adjustScale()
+		updateScroll()
 		return nil
 	}
 
@@ -196,8 +205,11 @@ func (g *Game) Update(screen *ebiten.Image) error {
 //Eventually optimize, don't re-calc draws each time, just store and offset
 func (g *Game) Draw(screen *ebiten.Image) {
 	t := ActiveWin.Text
+	ActiveWin.Lock.Lock()
+	defer ActiveWin.Lock.Unlock()
 
 	if ActiveWin.Update {
+		screen.Clear()
 		ActiveWin.Update = false
 
 		textLen := len(t)
@@ -249,36 +261,49 @@ func (g *Game) Draw(screen *ebiten.Image) {
 					charColor := color.RGBA64{textColors[c].Red, textColors[c].Green, textColors[c].Blue, 0xFFFF}
 					text.Draw(ActiveWin.FrameBuffer, string(t[c]),
 						ActiveWin.Font.Face,
-						LeftMargin+charWidth+(y*charWidth),
-						ActiveWin.Font.Size+(x*(ActiveWin.Font.Size+ActiveWin.Font.VerticalSpace)),
+						int(math.Round(LeftMargin+float64(charWidth)+(float64(y-1)*float64(charWidth)))),
+						int(math.Round(ActiveWin.Font.Size+(float64(x)*(ActiveWin.Font.Size+ActiveWin.Font.VerticalSpace)))),
 						charColor)
 					y++
 				}
 			}
 		}
-	}
-	err := screen.DrawImage(ActiveWin.FrameBuffer, nil)
-	if err != nil {
-		log.Fatal(err)
+		err = screen.DrawImage(ActiveWin.FrameBuffer, nil)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	// The unit of outsideWidth/Height is device-independent pixels.
 	// By multiplying them by the device scale factor, we can get a hi-DPI screen size.
+
 	s := ebiten.DeviceScaleFactor()
-	fmt.Println(fmt.Sprintf("Scale %v", s))
-	return int(float64(outsideWidth) * s), int(float64(outsideHeight) * s)
+	NewWidth := int(math.Round(float64(outsideWidth) * s))
+	NewHeight := int(math.Round(float64(outsideHeight) * s))
+
+	if NewWidth != ActiveWin.Width || NewHeight != ActiveWin.Height {
+		ActiveWin.Lock.Lock()
+		defer ActiveWin.Lock.Unlock()
+
+		adjustScale()
+		updateScroll()
+		ActiveWin.Update = true
+	}
+
+	return NewWidth, NewHeight
 }
 
 func adjustScale() {
 
 	ActiveWin.Title = DefaultWindowTitle
-	ActiveWin.Width = int(math.Round(DefaultWindowWidth * ActiveWin.Scale))
-	ActiveWin.Height = int(math.Round(DefaultWindowHeight * ActiveWin.Scale))
+	x, y := ebiten.WindowSize()
+	ActiveWin.Width = x
+	ActiveWin.Height = y
 
-	ActiveWin.Font.VerticalSpace = int(math.Round(DefaultVerticalSpace * ActiveWin.Scale))
-	ActiveWin.Font.Size = int(math.Round(DefaultFontSize * ActiveWin.Scale))
+	ActiveWin.Font.VerticalSpace = DefaultVerticalSpace * ActiveWin.Scale
+	ActiveWin.Font.Size = DefaultFontSize * ActiveWin.Scale
 
 	//Init font
 	ActiveWin.Font.Face = truetype.NewFace(tt, &truetype.Options{
@@ -287,7 +312,10 @@ func adjustScale() {
 		GlyphCacheEntries: glyphCacheSize,
 	})
 
-	ActiveWin.FrameBuffer, _ = ebiten.NewImage(ActiveWin.Width, ActiveWin.Height, ebiten.FilterNearest)
+	ActiveWin.FrameBuffer, _ = ebiten.NewImage(
+		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale)),
+		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale)),
+		ebiten.FilterNearest)
 }
 
 func main() {
@@ -317,12 +345,12 @@ func main() {
 	ActiveWin = &MainWin
 	//Load window defaults
 	ActiveWin.Title = DefaultWindowTitle
-	ActiveWin.Scale = ebiten.DeviceScaleFactor() * 2.0
-	ActiveWin.Width = int(math.Round(DefaultWindowWidth * ActiveWin.Scale))
-	ActiveWin.Height = int(math.Round(DefaultWindowHeight * ActiveWin.Scale))
+	ActiveWin.Scale = ebiten.DeviceScaleFactor()
+	ActiveWin.Width = DefaultWindowWidth
+	ActiveWin.Height = DefaultWindowHeight
 
-	ActiveWin.Font.VerticalSpace = int(math.Round(DefaultVerticalSpace * ActiveWin.Scale))
-	ActiveWin.Font.Size = int(math.Round(DefaultFontSize * ActiveWin.Scale))
+	ActiveWin.Font.VerticalSpace = DefaultVerticalSpace
+	ActiveWin.Font.Size = DefaultFontSize * ActiveWin.Scale
 
 	ActiveWin.RepeatDelay = DefaultRepeatDelay
 	ActiveWin.RepeatInterval = DefaultRepeatInterval
@@ -338,12 +366,22 @@ func main() {
 	ActiveWin.ScrollBack = greetString
 	ActiveWin.Text = greetString
 
+	ebiten.SetClearingScreenSkipped(true)
 	ebiten.SetWindowSize(ActiveWin.Width, ActiveWin.Height)
 	ebiten.SetWindowTitle(ActiveWin.Title)
 	ebiten.SetWindowResizable(true)
 	ebiten.SetVsyncEnabled(true)
-	ebiten.SetMaxTPS(30)
-	ActiveWin.FrameBuffer, _ = ebiten.NewImage(ActiveWin.Width, ActiveWin.Height, ebiten.FilterNearest)
+	ebiten.SetMaxTPS(60)
+	ebiten.SetRunnableOnUnfocused(true)
+	ebiten.SetRunnableInBackground(false)
+
+	ActiveWin.FrameBuffer, _ = ebiten.NewImage(
+		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale)),
+		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale)),
+		ebiten.FilterNearest)
+
+	adjustScale()
+	updateScroll()
 
 	DialSSL()
 	go ReadInput()
