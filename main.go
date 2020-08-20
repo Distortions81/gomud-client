@@ -206,52 +206,57 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	startTime := time.Now()
 	if ActiveWin.Update {
 
+		//Mutex
 		ActiveWin.Lock.Lock()
 		defer ActiveWin.Lock.Unlock()
 
+		//Just shorthand
 		t := ActiveWin.Text
 
+		//Clear screen, auto clear disabled for performance
 		screen.Clear()
 
+		//We are drawing, so we can turn off the need-update flag.
 		ActiveWin.Update = false
 
 		textLen := len(t)
-		foundColor := false
-		colorStart := 0
-		colorEnd := 0
-		drawColor := support.ANSI_DEFAULT
+		foundColor := false               //Mark when color code starts
+		colorStart := 0                   //Color code start position
+		colorEnd := 0                     //Color code end position
+		drawColor := support.ANSI_DEFAULT //Var to store the colors
+
 		var textColors [MAX_STRING_LENGTH]support.ANSIData
 
-		for z := 0; z < textLen; z++ {
+		for z := 0; z < textLen; z++ { //Loop through all chars
 			if t[z] == '\033' {
-				foundColor = true
-				colorStart = z
-				textColors[z] = support.ANSI_CONTROL
+				foundColor = true                    //Found ANSI escape code
+				colorStart = z                       //Record start pos
+				textColors[z] = support.ANSI_CONTROL //Mark this as no-draw
 				continue
-			} else if z-colorStart > 10 {
+			} else if z-colorStart > 10 { //Bail, this isn't a valid color code
 				foundColor = false
-			} else if foundColor && t[z] == 'm' {
+			} else if foundColor && t[z] == 'm' { //Color code end
 				colorEnd = z
 				foundColor = false
-				if z+1 < textLen {
+				if z+1 < textLen { //Make sure we dont run off the end of the string
 					drawColor = support.DecodeANSI(t[colorStart : colorEnd+1])
-					textColors[z+1] = drawColor
+					textColors[z+1] = drawColor //Set color
 				}
-				textColors[z] = support.ANSI_CONTROL
+				textColors[z] = support.ANSI_CONTROL //Mark code end as so
 				continue
 			}
 			if foundColor {
-				textColors[z] = support.ANSI_CONTROL
+				textColors[z] = support.ANSI_CONTROL //Not valid
 			} else {
-				textColors[z] = drawColor
+				textColors[z] = drawColor //Mark all characters with current color
 			}
 		}
 
-		charWidth := int(math.Round(float64(ActiveWin.Font.Size) / float64(HorizontalSpaceRatio)))
+		charWidth := int(math.Round(float64(ActiveWin.Font.Size) / float64(HorizontalSpaceRatio))) // Calc charater pixel width
 		tLen := len(t)
 		y := 0
 		x := 0
-		err := ActiveWin.FrameBuffer.Clear()
+		err := ActiveWin.FrameBuffer.Clear() //Clear frame buffer, buffer not actually needed now.
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -273,14 +278,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				}
 			}
 		}
-		err = screen.DrawImage(ActiveWin.FrameBuffer, nil)
+		err = screen.DrawImage(ActiveWin.FrameBuffer, nil) //Draw to screen
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	since := time.Since(startTime).Nanoseconds()
-	time.Sleep(time.Duration(16666666-since) * time.Nanosecond)
+	time.Sleep(time.Duration(16666666-since) * time.Nanosecond) //Sleep for the rest of the frame time
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -295,19 +300,21 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 		adjustScale()
 		updateScroll()
 		ActiveWin.Scale = ebiten.DeviceScaleFactor()
-		ActiveWin.Update = true
+		ActiveWin.Update = true // Layout changed, redraw screen
 	}
 
 	return NewWidth, NewHeight
 }
 
 func adjustScale() {
-	x, y := ebiten.WindowSize()
+	x, y := ebiten.WindowSize() // Get window size
 	ActiveWin.Width = x
 	ActiveWin.Height = y
 
 	ActiveWin.Title = DefaultWindowTitle
+	//Re-calculate vertical line spacing, may not be needed?
 	ActiveWin.Font.VerticalSpace = DefaultVerticalSpace * ActiveWin.Scale * ActiveWin.UserScale
+	//Recalculate font size based on new scale
 	ActiveWin.Font.Size = DefaultFontSize * ActiveWin.Scale * ActiveWin.UserScale
 
 	//Init font
@@ -317,6 +324,7 @@ func adjustScale() {
 		GlyphCacheEntries: glyphCacheSize,
 	})
 
+	//New framebuffer with new size.
 	ActiveWin.FrameBuffer, _ = ebiten.NewImage(
 		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale*ActiveWin.UserScale)),
 		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale*ActiveWin.UserScale)),
@@ -372,6 +380,7 @@ func main() {
 	ActiveWin.ScrollBack = greetString
 	ActiveWin.Text = greetString
 
+	//Setup window.
 	ebiten.SetClearingScreenSkipped(true)
 	ebiten.SetWindowSize(ActiveWin.Width, ActiveWin.Height)
 	ebiten.SetWindowTitle(ActiveWin.Title)
