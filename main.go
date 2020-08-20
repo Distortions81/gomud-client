@@ -376,6 +376,7 @@ func main() {
 		GlyphCacheEntries: glyphCacheSize,
 	})
 
+	//Draw greeting to window.
 	greetString := fmt.Sprintf("%v\n%v\n", string(greeting), VersionString)
 	ActiveWin.ScrollBack = greetString
 	ActiveWin.Text = greetString
@@ -390,16 +391,17 @@ func main() {
 	ebiten.SetRunnableOnUnfocused(true)
 	ebiten.SetRunnableInBackground(true)
 
+	//Setup frame buffer
 	ActiveWin.FrameBuffer, _ = ebiten.NewImage(
 		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale*ActiveWin.UserScale)),
 		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale*ActiveWin.UserScale)),
 		ebiten.FilterNearest)
 
-	adjustScale()
-	updateScroll()
+	adjustScale()  //Probably not needed
+	updateScroll() //Probably not needed
 
-	DialSSL()
-	go ReadInput()
+	DialSSL()      //Connnect
+	go ReadInput() //Start reading connection
 
 	g := &Game{
 		counter: 0,
