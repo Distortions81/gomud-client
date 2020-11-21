@@ -142,7 +142,7 @@ func ReadInput() {
 	}
 }
 
-func (g *Game) Update(screen *ebiten.Image) error {
+func (g *Game) Update() error {
 	startTime := time.Now()
 
 	keyPressed := false
@@ -256,10 +256,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		tLen := len(t)
 		y := 0
 		x := 0
-		err := ActiveWin.FrameBuffer.Clear() //Clear frame buffer, buffer not actually needed now.
-		if err != nil {
-			log.Fatal(err)
-		}
+		ActiveWin.FrameBuffer.Clear() //Clear frame buffer, buffer not actually needed now.
 		for c := 0; c < tLen; c++ {
 			if t[c] == '\n' {
 				y = 0
@@ -278,10 +275,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				}
 			}
 		}
-		err = screen.DrawImage(ActiveWin.FrameBuffer, nil) //Draw to screen
-		if err != nil {
-			log.Fatal(err)
-		}
+		screen.DrawImage(ActiveWin.FrameBuffer, nil) //Draw to screen
 	}
 
 	since := time.Since(startTime).Nanoseconds()
@@ -325,10 +319,9 @@ func adjustScale() {
 	})
 
 	//New framebuffer with new size.
-	ActiveWin.FrameBuffer, _ = ebiten.NewImage(
+	ActiveWin.FrameBuffer = ebiten.NewImage(
 		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale*ActiveWin.UserScale)),
-		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale*ActiveWin.UserScale)),
-		ebiten.FilterNearest)
+		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale*ActiveWin.UserScale)))
 }
 
 func main() {
@@ -382,20 +375,17 @@ func main() {
 	ActiveWin.Text = greetString
 
 	//Setup window.
-	ebiten.SetClearingScreenSkipped(true)
 	ebiten.SetWindowSize(ActiveWin.Width, ActiveWin.Height)
 	ebiten.SetWindowTitle(ActiveWin.Title)
 	ebiten.SetWindowResizable(true)
 	ebiten.SetVsyncEnabled(false)
 	ebiten.SetMaxTPS(30)
 	ebiten.SetRunnableOnUnfocused(true)
-	ebiten.SetRunnableInBackground(true)
 
 	//Setup frame buffer
-	ActiveWin.FrameBuffer, _ = ebiten.NewImage(
+	ActiveWin.FrameBuffer = ebiten.NewImage(
 		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale*ActiveWin.UserScale)),
-		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale*ActiveWin.UserScale)),
-		ebiten.FilterNearest)
+		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale*ActiveWin.UserScale)))
 
 	adjustScale()  //Probably not needed
 	updateScroll() //Probably not needed
@@ -403,14 +393,7 @@ func main() {
 	DialSSL()      //Connnect
 	go ReadInput() //Start reading connection
 
-	g := &Game{
-		counter: 0,
-	}
-
-	if err := ebiten.RunGame(g); err != nil {
-		log.Fatal(err)
-	}
-
+	ebiten.RunGame(&Game{})
 }
 
 func DialSSL() {
