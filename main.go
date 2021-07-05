@@ -316,8 +316,8 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func adjustScale() {
 	x, y := ebiten.WindowSize() // Get window size
-	ActiveWin.Width = y
-	ActiveWin.Height = x
+	ActiveWin.Width = x
+	ActiveWin.Height = int(float64(y) * 1.75) //wtf?
 
 	ActiveWin.Title = DefaultWindowTitle
 	//Re-calculate vertical line spacing, may not be needed?
@@ -378,7 +378,7 @@ func main() {
 	ebiten.SetWindowTitle(ActiveWin.Title)
 	ebiten.SetWindowResizable(true)
 	ebiten.SetVsyncEnabled(false)
-	ebiten.SetMaxTPS(30)
+	ebiten.SetMaxTPS(60)
 	ebiten.SetRunnableOnUnfocused(true)
 
 	//Setup frame buffer
