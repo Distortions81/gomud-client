@@ -30,7 +30,6 @@ var greeting []byte
 
 const DefaultServer = "127.0.0.1:7778"
 const VersionString = "Pre-Alpha build, v0.0.02 07-04-2021-1055p"
-const DefaultUIScale = 1.0
 const MAX_STRING_LENGTH = 1024 * 10
 
 //Window
@@ -228,7 +227,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		t := ActiveWin.Text
 
 		//Clear screen, auto clear disabled for performance
-		screen.Clear()
+		//screen.Clear()
 
 		//We are drawing, so we can turn off the need-update flag.
 		ActiveWin.Update = false
@@ -271,6 +270,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		y := 0
 		x := 0
 		ActiveWin.FrameBuffer.Clear() //Clear frame buffer, buffer not actually needed now.
+		//ActiveWin.FrameBuffer.Fill(color.NRGBA{0xFF, 0x00, 0x00, 0xff})
 		for c := 0; c < tLen; c++ {
 			if t[c] == '\n' {
 				y = 0
@@ -307,7 +307,6 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 		adjustScale()
 		updateScroll()
-		ActiveWin.Scale = 1.0   //ebiten.DeviceScaleFactor()
 		ActiveWin.Update = true // Layout changed, redraw screen
 	}
 
@@ -317,7 +316,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 func adjustScale() {
 	x, y := ebiten.WindowSize() // Get window size
 	ActiveWin.Width = x
-	ActiveWin.Height = int(float64(y) * 1.75) //wtf?
+	ActiveWin.Height = y
 
 	ActiveWin.Title = DefaultWindowTitle
 	//Re-calculate vertical line spacing, may not be needed?
@@ -334,8 +333,8 @@ func adjustScale() {
 
 	//New framebuffer with new size.
 	ActiveWin.FrameBuffer = ebiten.NewImage(
-		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale*ActiveWin.UserScale)),
-		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale*ActiveWin.UserScale)))
+		ActiveWin.Width,
+		ActiveWin.Height)
 }
 
 func main() {
@@ -350,16 +349,29 @@ func main() {
 	ActiveWin = &MainWin
 	//Load window defaults
 	ActiveWin.Title = DefaultWindowTitle
-	ActiveWin.UserScale = DefaultUIScale
+	ActiveWin.UserScale = 1.0
 	ActiveWin.Scale = 1.0
-	ActiveWin.Width = int(float64(DefaultWindowWidth) * ActiveWin.UserScale)
-	ActiveWin.Height = int(float64(DefaultWindowHeight) * ActiveWin.UserScale)
+	ActiveWin.Width = DefaultWindowWidth
+	ActiveWin.Height = DefaultWindowHeight
 
 	ActiveWin.Font.VerticalSpace = DefaultVerticalSpace
 	ActiveWin.Font.Size = DefaultFontSize * ActiveWin.Scale * ActiveWin.UserScale
 
 	ActiveWin.RepeatDelay = DefaultRepeatDelay
 	ActiveWin.RepeatInterval = DefaultRepeatInterval
+
+	//Setup window.
+	ebiten.SetWindowSize(ActiveWin.Width, ActiveWin.Height)
+	ebiten.SetWindowTitle(ActiveWin.Title)
+	ebiten.SetWindowResizable(true)
+	ebiten.SetVsyncEnabled(false)
+	ebiten.SetMaxTPS(60)
+	ebiten.SetRunnableOnUnfocused(true)
+
+	//Setup frame buffer
+	ActiveWin.FrameBuffer = ebiten.NewImage(
+		ActiveWin.Width,
+		ActiveWin.Height)
 
 	//Init font
 	ActiveWin.Font.Face = truetype.NewFace(tt, &truetype.Options{
@@ -372,22 +384,6 @@ func main() {
 	greetString := fmt.Sprintf("%v\n%v\n", string(greeting), VersionString)
 	ActiveWin.ScrollBack = greetString
 	ActiveWin.Text = greetString
-
-	//Setup window.
-	ebiten.SetWindowSize(ActiveWin.Width, ActiveWin.Height)
-	ebiten.SetWindowTitle(ActiveWin.Title)
-	ebiten.SetWindowResizable(true)
-	ebiten.SetVsyncEnabled(false)
-	ebiten.SetMaxTPS(60)
-	ebiten.SetRunnableOnUnfocused(true)
-
-	//Setup frame buffer
-	ActiveWin.FrameBuffer = ebiten.NewImage(
-		int(math.Round(float64(ActiveWin.Width)*ActiveWin.Scale*ActiveWin.UserScale)),
-		int(math.Round(float64(ActiveWin.Height)*ActiveWin.Scale*ActiveWin.UserScale)))
-
-	adjustScale()  //Probably not needed
-	updateScroll() //Probably not needed
 
 	go func() {
 		DialSSL(DefaultServer) //Connnect
