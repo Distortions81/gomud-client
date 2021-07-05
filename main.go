@@ -28,9 +28,9 @@ var DefaultFont []byte
 //go:embed "greet.txt"
 var greeting []byte
 
-const DefaultServer = "m45sci.xyz:7778"
+const DefaultServer = "127.0.0.1:7778"
 const VersionString = "Pre-Alpha build, v0.0.02 07-04-2021-0955p"
-const DefaultUIScale = 2.0
+const DefaultUIScale = 1.0
 const MAX_STRING_LENGTH = 1024 * 10
 
 //Window
@@ -44,6 +44,7 @@ const DefaultWindowTitle = "GoMud-Client"
 
 type Window struct {
 	Title       string
+	ConName     string
 	Update      bool
 	FrameBuffer *ebiten.Image
 	Lock        sync.Mutex
@@ -143,7 +144,10 @@ func ReadInput() {
 			if err != nil {
 				log.Println(n, err)
 				ActiveWin.Con.Close()
-				os.Exit(0)
+
+				buf := fmt.Sprintf("Lost connection to %s: %s\r\n", ActiveWin.ConName, err)
+				AddText(buf)
+				ActiveWin.Con = nil
 			}
 			newData := string(buf[:n])
 			AddText(newData)
@@ -303,7 +307,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 		adjustScale()
 		updateScroll()
-		ActiveWin.Scale = ebiten.DeviceScaleFactor()
+		ActiveWin.Scale = 1.0   //ebiten.DeviceScaleFactor()
 		ActiveWin.Update = true // Layout changed, redraw screen
 	}
 
@@ -312,8 +316,8 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func adjustScale() {
 	x, y := ebiten.WindowSize() // Get window size
-	ActiveWin.Width = x
-	ActiveWin.Height = y
+	ActiveWin.Width = y
+	ActiveWin.Height = x
 
 	ActiveWin.Title = DefaultWindowTitle
 	//Re-calculate vertical line spacing, may not be needed?
@@ -347,7 +351,7 @@ func main() {
 	//Load window defaults
 	ActiveWin.Title = DefaultWindowTitle
 	ActiveWin.UserScale = DefaultUIScale
-	ActiveWin.Scale = ebiten.DeviceScaleFactor()
+	ActiveWin.Scale = 1.0
 	ActiveWin.Width = int(float64(DefaultWindowWidth) * ActiveWin.UserScale)
 	ActiveWin.Height = int(float64(DefaultWindowHeight) * ActiveWin.UserScale)
 
@@ -403,6 +407,7 @@ func DialSSL(addr string) {
 		InsecureSkipVerify: true,
 	}
 
+	ActiveWin.ConName = addr
 	conn, err := tls.Dial("tcp", addr, conf)
 	if err != nil {
 		log.Println(err)
