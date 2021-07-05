@@ -2,9 +2,9 @@ package main
 
 import (
 	"crypto/tls"
+	_ "embed"
 	"fmt"
 	"image/color"
-	"io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"./support"
-
 	"github.com/golang/freetype/truetype"
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/inpututil"
@@ -21,11 +20,18 @@ import (
 	"golang.org/x/image/font"
 )
 
-const VersionString = "Pre-Alpha build, v0.0.01 08162020-0909"
-const MAX_STRING_LENGTH = 1024 * 10
+//default font
+//go:embed "unispacerg.ttf"
+var DefaultFont []byte
 
-//Greeting
-const DefaultGreetFile = "greet.txt"
+//default greeting
+//go:embed "greet.txt"
+var greeting []byte
+
+const DefaultServer = "m45sci.xyz:7778"
+const VersionString = "Pre-Alpha build, v0.0.02 07-04-2021-0955p"
+const DefaultUIScale = 2.0
+const MAX_STRING_LENGTH = 1024 * 10
 
 //Window
 const DefaultWindowWidth = 640.0
@@ -69,8 +75,6 @@ type ScrollData struct {
 	ScrollPos int
 }
 
-//Font
-const DefaultFontFile = "unispacerg.ttf"
 const glyphCacheSize = 256
 const DefaultVerticalSpace = 4.0
 const HorizontalSpaceRatio = 1.5
@@ -121,22 +125,28 @@ func updateScroll() {
 	}
 }
 
+func AddText(newData string) {
+	if newData != "" {
+		ActiveWin.Lock.Lock()
+		ActiveWin.Update = true
+		ActiveWin.ScrollBack += newData
+		updateScroll()
+		ActiveWin.Lock.Unlock()
+	}
+}
+
 func ReadInput() {
 	for {
 		buf := make([]byte, MAX_STRING_LENGTH)
-		n, err := ActiveWin.Con.Read(buf)
-		if err != nil {
-			log.Println(n, err)
-			ActiveWin.Con.Close()
-			os.Exit(0)
-		}
-		newData := string(buf[:n])
-		if newData != "" {
-			ActiveWin.Lock.Lock()
-			ActiveWin.Update = true
-			ActiveWin.ScrollBack += newData
-			updateScroll()
-			ActiveWin.Lock.Unlock()
+		if ActiveWin.Con != nil {
+			n, err := ActiveWin.Con.Read(buf)
+			if err != nil {
+				log.Println(n, err)
+				ActiveWin.Con.Close()
+				os.Exit(0)
+			}
+			newData := string(buf[:n])
+			AddText(newData)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -327,23 +337,8 @@ func adjustScale() {
 func main() {
 	var err error
 
-	//Read default font
-	MainWin.Font.Data, err = ioutil.ReadFile(DefaultFontFile)
-	if err != nil {
-		log.Fatal(err)
-
-	}
-
-	//Read default greeting
-	var greeting []byte
-	greeting, err = ioutil.ReadFile(DefaultGreetFile)
-	if err != nil {
-		log.Fatal(err)
-
-	}
-
 	//Load font
-	tt, err = truetype.Parse(MainWin.Font.Data)
+	tt, err = truetype.Parse(DefaultFont)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -351,7 +346,7 @@ func main() {
 	ActiveWin = &MainWin
 	//Load window defaults
 	ActiveWin.Title = DefaultWindowTitle
-	ActiveWin.UserScale = 2.0
+	ActiveWin.UserScale = DefaultUIScale
 	ActiveWin.Scale = ebiten.DeviceScaleFactor()
 	ActiveWin.Width = int(float64(DefaultWindowWidth) * ActiveWin.UserScale)
 	ActiveWin.Height = int(float64(DefaultWindowHeight) * ActiveWin.UserScale)
@@ -390,21 +385,30 @@ func main() {
 	adjustScale()  //Probably not needed
 	updateScroll() //Probably not needed
 
-	DialSSL()      //Connnect
-	go ReadInput() //Start reading connection
+	go func() {
+		DialSSL(DefaultServer) //Connnect
+		go ReadInput()         //Start reading connection
+	}()
 
 	ebiten.RunGame(&Game{})
 }
 
-func DialSSL() {
+func DialSSL(addr string) {
 
+	buf := fmt.Sprintf("Connecting to: %s\r\n", addr)
+	AddText(buf)
+
+	//Todo, allow timeout adjustment and connection canceling.
 	conf := &tls.Config{
 		InsecureSkipVerify: true,
 	}
 
-	conn, err := tls.Dial("tcp", "bhmm.net:7778", conf)
+	conn, err := tls.Dial("tcp", addr, conf)
 	if err != nil {
 		log.Println(err)
+
+		buf := fmt.Sprintf("%s\r\n", err)
+		AddText(buf)
 		return
 	}
 	ActiveWin.Con = conn
