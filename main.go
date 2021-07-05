@@ -269,7 +269,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		tLen := len(t)
 		y := 0
 		x := 0
-		ActiveWin.FrameBuffer.Clear() //Clear frame buffer, buffer not actually needed now.
+		//ActiveWin.FrameBuffer.Clear() //Clear frame buffer, buffer not actually needed now.
 		//ActiveWin.FrameBuffer.Fill(color.NRGBA{0xFF, 0x00, 0x00, 0xff})
 		for c := 0; c < tLen; c++ {
 			if t[c] == '\n' {
@@ -289,9 +289,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				}
 			}
 		}
-		screen.DrawImage(ActiveWin.FrameBuffer, nil) //Draw to screen
+		//screen.DrawImage(ActiveWin.FrameBuffer, nil) //Draw to screen
 	}
 
+	screen.DrawImage(ActiveWin.FrameBuffer, nil) //Draw to screen
 	since := time.Since(startTime).Nanoseconds()
 	time.Sleep(time.Duration(16666666-since) * time.Nanosecond) //Sleep for the rest of the frame time
 }
