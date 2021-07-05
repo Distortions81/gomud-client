@@ -29,7 +29,7 @@ var DefaultFont []byte
 var greeting []byte
 
 const DefaultServer = "127.0.0.1:7778"
-const VersionString = "Pre-Alpha build, v0.0.02 07-04-2021-0955p"
+const VersionString = "Pre-Alpha build, v0.0.02 07-04-2021-1055p"
 const DefaultUIScale = 1.0
 const MAX_STRING_LENGTH = 1024 * 10
 
