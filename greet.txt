@@ -10,3 +10,5 @@ _________ .__  .__               __
 \     \___|  |_|  \  ___/|   |  \  |     
  \______  /____/__|\___  >___|  /__|     
         \/             \/     \/         
+control + and - to control font size.
+/connect ip:port
