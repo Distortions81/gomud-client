@@ -122,12 +122,14 @@ func renderLine(pos int) *ebiten.Image {
 		text.Draw(tempImg, mainWin.lines.lines[pos],
 			mainWin.font.face,
 			0,
-			0,
+			int(mainWin.font.size)+mainWin.font.vertSpace,
 			color.RGBA{0xFF, 0x00, 0x00, 0xFF})
 
 		mainWin.dirty = true
 		mainWin.lines.rendered[pos] = true
 		return tempImg
+	} else {
+		fmt.Println("renderLine: invalid size")
 	}
 	mainWin.lines.rendered[pos] = false
 	return nil
@@ -203,7 +205,11 @@ func renderOffscreen() {
 
 		//Render our images out here
 		if mainWin.lines.rendered[0] == true {
-			mainWin.offScreen.DrawImage(mainWin.lines.pixLines[0], nil)
+			op := &ebiten.DrawImageOptions{}
+			op.Filter = ebiten.FilterNearest
+			mainWin.offScreen.DrawImage(mainWin.lines.pixLines[0], op)
+		} else {
+			fmt.Println("renderOffsreen: Nothing to draw.")
 		}
 	}
 }
