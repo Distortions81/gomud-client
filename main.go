@@ -70,10 +70,10 @@ type Window struct {
 }
 
 type ScrollBack struct {
-	scrollBack     [MAX_SCROLL_LINES]string
-	scrollBackPos  int
-	scrollBackHead int
-	scrollBackTail int
+	lines [MAX_SCROLL_LINES]string
+	pos   int
+	head  int
+	tail  int
 }
 
 type ViewPort struct {
@@ -152,10 +152,10 @@ func init() {
 		GlyphCacheEntries: glyphCacheSize,
 	})
 
-	mainWin.scrollBack[0] = "Testing"
-	mainWin.scrollBackPos = 0
-	mainWin.scrollBackHead = 0
-	mainWin.scrollBackTail = 0
+	mainWin.scrollBack.lines[0] = "Testing"
+	mainWin.scrollBack.pos = 0
+	mainWin.scrollBack.head = 0
+	mainWin.scrollBack.tail = 0
 
 	mainWin.offScreen = ebiten.NewImage(mainWin.width, mainWin.height)
 	mainWin.dirty = true
@@ -191,7 +191,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		mainWin.offScreen.Clear()
 		//mainWin.offScreen.Fill(color.RGBA{0xFF, 0x00, 0x00, 0xFF})
 
-		charColor := color.RGBA64{0xFFFF, 0xFFF, 0xFFF, 0xFFFF}
+		charColor := color.RGBA{0xFF, 0x00, 0x00, 0xFF}
 		text.Draw(mainWin.offScreen, "testing",
 			mainWin.font.face,
 			50,
