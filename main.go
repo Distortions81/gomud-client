@@ -8,13 +8,18 @@ import (
 	_ "github.com/flopp/go-findfont"
 	"github.com/golang/freetype/truetype"
 	"github.com/hajimehoshi/ebiten"
+	"github.com/hajimehoshi/ebiten/inpututil"
+	"github.com/hajimehoshi/ebiten/text"
 	"golang.org/x/image/font"
 )
 
 //Embeds
 //default font
 //go:embed "unispacerg.ttf"
-var DefaultFont []byte
+var defaultFont []byte
+
+const glyphCacheSize = 256
+const defaultFontSize = 18
 
 //default greeting
 //go:embed "greet.txt"
@@ -23,19 +28,20 @@ var greeting []byte
 //Constants
 const MAX_INPUT_LENGTH = 1024 * 100
 const MAX_LINE_LENGTH = 1024
+const MAX_VIEW_LINES = 512
 
-const DefaultWindowTitle = "GoMud-Client"
-const DefaultServer = "127.0.0.1:7778"
+const defaultWindowTitle = "GoMud-Client"
+const defaultServer = "127.0.0.1:7778"
 const VersionString = "Pre-Alpha build, v0.0.02 07052021937p"
 
-const DefaultWindowWidth = 960
-const DefaultWindowHeight = 540
-const DefaultUserScale = 1.0
+const defaultWindowWidth = 960
+const defaultWindowHeight = 540
+const defaultUserScale = 1.0
 
-const DefaultRepeatInterval = 3
-const DefaultRepeatDelay = 30
+const defaultRepeatInterval = 3
+const defaultRepeatDelay = 30
 
-const ScrollBackLinesMax = 10000
+const MAX_SCROLL_LINES = 10000
 
 type Window struct {
 	serverAddr  string
@@ -49,22 +55,38 @@ type Window struct {
 	realHeight int
 	userScale  float64
 
-	scrollBack     [ScrollBackLinesMax]string
-	scrollBackPos  int
-	scrollBackHead int
-	scrollBackTail int
+	font FontData
+
+	repeatDelay    int
+	repeatInterval int
+
+	scrollBack ScrollBack
+	viewport   ViewPort
+
+	viewPortStrings [MAX_VIEW_LINES]string
+	viewPortPixels  [MAX_VIEW_LINES]string
 
 	dirty bool
 }
 
-type FontData struct {
-	VertSpace int
-	CharWidth int
-	Size      float64
-	Data      []byte
-	Face      font.Face
+type ScrollBack struct {
+	scrollBack     [MAX_SCROLL_LINES]string
+	scrollBackPos  int
+	scrollBackHead int
+	scrollBackTail int
+}
 
-	Dirty bool
+type ViewPort struct {
+}
+
+type FontData struct {
+	vertSpace int
+	charWidth int
+	size      float64
+	data      []byte
+	face      font.Face
+
+	dirty bool
 }
 
 //Globals
@@ -90,26 +112,47 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func (g *Game) Update() error {
+
 	return nil
+}
+
+// repeatingKeyPressed return true when key is pressed considering the repeat state.
+func repeatingKeyPressed(key ebiten.Key) bool {
+	d := inpututil.KeyPressDuration(key)
+	if d == 1 {
+		return true
+	}
+	if d >= mainWin.repeatDelay && (d-mainWin.repeatDelay)%mainWin.repeatInterval == 0 {
+		return true
+	}
+	return false
 }
 
 func init() {
 	var err error
 
 	//Load font
-	tt, err = truetype.Parse(DefaultFont)
+	tt, err = truetype.Parse(defaultFont)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	mainWin.serverAddr = DefaultServer
+	mainWin.serverAddr = defaultServer
 	mainWin.isConnected = false
-	mainWin.title = DefaultWindowTitle
-	mainWin.width = DefaultWindowWidth
-	mainWin.height = DefaultWindowHeight
-	mainWin.userScale = DefaultUserScale
+	mainWin.title = defaultWindowTitle
+	mainWin.width = defaultWindowWidth
+	mainWin.height = defaultWindowHeight
+	mainWin.userScale = defaultUserScale
 
-	mainWin.scrollBack[0] = ""
+	//Init font
+	mainWin.font.size = defaultFontSize
+	mainWin.font.face = truetype.NewFace(tt, &truetype.Options{
+		Size:              mainWin.font.size,
+		Hinting:           font.HintingFull,
+		GlyphCacheEntries: glyphCacheSize,
+	})
+
+	mainWin.scrollBack[0] = "Testing"
 	mainWin.scrollBackPos = 0
 	mainWin.scrollBackHead = 0
 	mainWin.scrollBackTail = 0
@@ -122,7 +165,18 @@ func init() {
 	ebiten.SetMaxTPS(60)
 }
 
+func ScrollbackToViewport() {
+
+}
+
+func PreRenderLines() {
+
+}
+
+//This should only draw processed lines
 func (g *Game) Draw(screen *ebiten.Image) {
+
+	//startTime := time.Now()
 	if mainWin.dirty {
 		mainWin.dirty = false
 
@@ -135,12 +189,22 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 
 		mainWin.offScreen.Clear()
-		mainWin.offScreen.Fill(color.RGBA{0xFF, 0x00, 0x00, 0xFF})
+		//mainWin.offScreen.Fill(color.RGBA{0xFF, 0x00, 0x00, 0xFF})
+
+		charColor := color.RGBA64{0xFFFF, 0xFFF, 0xFFF, 0xFFFF}
+		text.Draw(mainWin.offScreen, "testing",
+			mainWin.font.face,
+			50,
+			50,
+			charColor)
+
+		//op := &ebiten.DrawImageOptions{}
+		//op.Filter = ebiten.FilterNearest
+		//screen.DrawImage(mainWin.offScreen, nil)
 	}
 
-	op := &ebiten.DrawImageOptions{}
-	// Specify linear filter.
-	op.Filter = ebiten.FilterLinear
+	screen.DrawImage(mainWin.offScreen, nil)
 
-	screen.DrawImage(mainWin.offScreen, op)
+	//since := time.Since(startTime).Nanoseconds()
+	//time.Sleep(time.Duration(16666-since) * time.Nanosecond)
 }
