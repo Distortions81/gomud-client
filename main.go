@@ -26,7 +26,7 @@ const MAX_LINE_LENGTH = 1024
 
 const DefaultWindowTitle = "GoMud-Client"
 const DefaultServer = "127.0.0.1:7778"
-const VersionString = "Pre-Alpha build, v0.0.02 07-04-2021-1055p"
+const VersionString = "Pre-Alpha build, v0.0.02 07052021937p"
 
 const DefaultWindowWidth = 960
 const DefaultWindowHeight = 540
