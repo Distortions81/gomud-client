@@ -1,4 +1,4 @@
-package main
+package old
 
 import (
 	"crypto/tls"
@@ -41,6 +41,16 @@ const DefaultRepeatDelay = 30
 
 const DefaultWindowTitle = "GoMud-Client"
 
+type FontData struct {
+	VerticalSpace float64
+	Size          float64
+	Data          []byte
+	Face          font.Face
+
+	Color string
+	Dirty bool
+}
+
 type Window struct {
 	Title       string
 	ConName     string
@@ -80,16 +90,6 @@ const DefaultVerticalSpace = 4.0
 const HorizontalSpaceRatio = 1.5
 const DefaultFontSize = 12.0
 const LeftMargin = 6.0
-
-type FontData struct {
-	VerticalSpace float64
-	Size          float64
-	Data          []byte
-	Face          font.Face
-
-	Color string
-	Dirty bool
-}
 
 //Data
 var MainWin Window
@@ -337,7 +337,7 @@ func adjustScale() {
 		ActiveWin.Height)
 }
 
-func main() {
+func notmain() {
 	var err error
 
 	//Load font
