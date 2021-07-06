@@ -39,6 +39,7 @@ const defaultServer = "127.0.0.1:7778"
 const VersionString = "Pre-Alpha build, v0.0.02 07052021937p"
 
 const defaultHorizontalSpaceRatio = 1.5
+const DefaultVerticalSpace = 2.0
 
 const defaultWindowWidth = 960
 const defaultWindowHeight = 540
@@ -81,7 +82,7 @@ type TextHistory struct {
 type FontData struct {
 	vertSpace  int
 	charWidth  int
-	chatHeight int
+	charHeight int
 	size       int
 	data       []byte
 	face       font.Face
@@ -112,7 +113,14 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func renderText() {
-	mainWin.lines.pixLines[0] = renderLine(0)
+	head := mainWin.lines.head
+	tail := mainWin.lines.tail
+	for a := tail; a <= head && a >= tail; a++ {
+		if mainWin.lines.rendered[a] == false {
+			mainWin.lines.pixLines[a] = renderLine(a)
+		}
+
+	}
 }
 
 func renderLine(pos int) *ebiten.Image {
@@ -121,12 +129,13 @@ func renderLine(pos int) *ebiten.Image {
 		tempImg := ebiten.NewImage(mainWin.realWidth, int(mainWin.font.size)+mainWin.font.vertSpace)
 		text.Draw(tempImg, mainWin.lines.lines[pos],
 			mainWin.font.face,
-			0,
+			mainWin.font.size,
 			int(mainWin.font.size)+mainWin.font.vertSpace,
 			color.RGBA{0xFF, 0x00, 0x00, 0xFF})
 
 		mainWin.dirty = true
 		mainWin.lines.rendered[pos] = true
+		fmt.Println("renderLine: good")
 		return tempImg
 	} else {
 		fmt.Println("renderLine: invalid size")
@@ -177,16 +186,18 @@ func init() {
 		GlyphCacheEntries: glyphCacheSize,
 	})
 
-	//Calculate character pixel width
+	//Font setup
+	mainWin.font.vertSpace = mainWin.font.size / DefaultVerticalSpace
 	mainWin.font.charWidth = int(math.Round(float64(mainWin.font.size) / float64(defaultHorizontalSpaceRatio)))
+	mainWin.font.charHeight = int(math.Round(float64(mainWin.font.size) + float64(mainWin.font.vertSpace)))
 
 	mainWin.lines.lines[0] = "This"
 	mainWin.lines.lines[1] = "is"
 	mainWin.lines.lines[2] = "a"
 	mainWin.lines.lines[3] = "test"
 	mainWin.lines.pos = 0
-	mainWin.lines.head = 0
-	mainWin.lines.tail = 3
+	mainWin.lines.head = 3
+	mainWin.lines.tail = 0
 
 	mainWin.offScreen = ebiten.NewImage(mainWin.width, mainWin.height)
 	mainWin.dirty = false
@@ -204,12 +215,17 @@ func renderOffscreen() {
 		mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
 
 		//Render our images out here
-		if mainWin.lines.rendered[0] == true {
-			op := &ebiten.DrawImageOptions{}
-			op.Filter = ebiten.FilterNearest
-			mainWin.offScreen.DrawImage(mainWin.lines.pixLines[0], op)
-		} else {
-			fmt.Println("renderOffsreen: Nothing to draw.")
+		head := mainWin.lines.head
+		tail := mainWin.lines.tail
+		for a := tail; a <= head && a >= tail; a++ {
+			if mainWin.lines.rendered[a] == true {
+				op := &ebiten.DrawImageOptions{}
+				op.Filter = ebiten.FilterNearest
+				op.GeoM.Translate(0.0, float64(a*mainWin.font.charHeight))
+				mainWin.offScreen.DrawImage(mainWin.lines.pixLines[a], op)
+			} else {
+				fmt.Println("renderOffsreen: Nothing to draw.")
+			}
 		}
 	}
 }
