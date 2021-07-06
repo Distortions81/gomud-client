@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"log"
 	"math"
+	"sync"
+	"time"
 
 	_ "github.com/flopp/go-findfont"
 	"github.com/golang/freetype/truetype"
@@ -47,6 +49,8 @@ const defaultUserScale = 1.0
 
 const defaultRepeatInterval = 3
 const defaultRepeatDelay = 30
+
+var renderLock sync.Mutex
 
 type Window struct {
 	serverAddr  string
@@ -113,14 +117,24 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func renderText() {
+	//LOCK
+	renderLock.Lock()
+	//LOCK
+
 	head := mainWin.lines.head
 	tail := mainWin.lines.tail
 	for a := tail; a <= head && a >= tail; a++ {
 		if mainWin.lines.rendered[a] == false {
-			mainWin.lines.pixLines[a] = renderLine(a)
+			go func(a int) {
+				mainWin.lines.pixLines[a] = renderLine(a)
+			}(a)
 		}
 
 	}
+
+	//UNLOCK
+	renderLock.Unlock()
+	//UNLOCK
 }
 
 func renderLine(pos int) *ebiten.Image {
@@ -145,9 +159,17 @@ func renderLine(pos int) *ebiten.Image {
 }
 
 func (g *Game) Update() error {
-	renderText()
-	renderOffscreen()
 	return nil
+}
+
+func asyncUpdate() {
+	go func() {
+		for {
+			renderText()
+			renderOffscreen()
+			time.Sleep(1 * time.Millisecond)
+		}
+	}()
 }
 
 // repeatingKeyPressed return true when key is pressed considering the repeat state.
@@ -205,10 +227,15 @@ func init() {
 	ebiten.SetWindowTitle(mainWin.title)
 	ebiten.SetWindowSize(mainWin.width, mainWin.height)
 	ebiten.SetMaxTPS(60)
+
+	asyncUpdate()
 }
 
 func renderOffscreen() {
 	if mainWin.dirty {
+		//LOCK
+		renderLock.Lock()
+		//LOCK
 		mainWin.dirty = false
 
 		mainWin.offScreen.Clear()
@@ -218,6 +245,7 @@ func renderOffscreen() {
 		head := mainWin.lines.head
 		tail := mainWin.lines.tail
 		for a := tail; a <= head && a >= tail; a++ {
+
 			if mainWin.lines.rendered[a] == true {
 				op := &ebiten.DrawImageOptions{}
 				op.Filter = ebiten.FilterNearest
@@ -227,6 +255,9 @@ func renderOffscreen() {
 				fmt.Println("renderOffsreen: Nothing to draw.")
 			}
 		}
+		//UNLOCK
+		renderLock.Unlock()
+		//UNLOCK
 	}
 }
 
