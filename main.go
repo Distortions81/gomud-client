@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"fmt"
 	"image/color"
 	"log"
 
@@ -113,6 +114,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func (g *Game) Update() error {
 
+	RenderOffscreen()
 	return nil
 }
 
@@ -152,7 +154,7 @@ func init() {
 		GlyphCacheEntries: glyphCacheSize,
 	})
 
-	mainWin.scrollBack.lines[0] = "Testing"
+	mainWin.scrollBack.lines[0] = ""
 	mainWin.scrollBack.pos = 0
 	mainWin.scrollBack.head = 0
 	mainWin.scrollBack.tail = 0
@@ -173,23 +175,12 @@ func PreRenderLines() {
 
 }
 
-//This should only draw processed lines
-func (g *Game) Draw(screen *ebiten.Image) {
-
-	//startTime := time.Now()
+func RenderOffscreen() {
 	if mainWin.dirty {
 		mainWin.dirty = false
 
-		sx, sy := screen.Size()
-		mainWin.realWidth = sx
-		mainWin.realHeight = sy
-
-		if mainWin.width != mainWin.realWidth || mainWin.height != mainWin.realHeight {
-			mainWin.offScreen = ebiten.NewImage(mainWin.realWidth, mainWin.realHeight)
-		}
-
 		mainWin.offScreen.Clear()
-		//mainWin.offScreen.Fill(color.RGBA{0xFF, 0x00, 0x00, 0xFF})
+		mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
 
 		charColor := color.RGBA{0xFF, 0x00, 0x00, 0xFF}
 		text.Draw(mainWin.offScreen, "testing",
@@ -197,14 +188,24 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			50,
 			50,
 			charColor)
+	}
+}
 
-		//op := &ebiten.DrawImageOptions{}
-		//op.Filter = ebiten.FilterNearest
-		//screen.DrawImage(mainWin.offScreen, nil)
+func (g *Game) Draw(screen *ebiten.Image) {
+
+	sx, sy := screen.Size()
+	if mainWin.realWidth != sx || mainWin.realHeight != sy {
+		mainWin.realWidth = sx
+		mainWin.realHeight = sy
+		mainWin.offScreen = ebiten.NewImage(sx, sy)
+
+		//Re-render
+		mainWin.dirty = true
+		RenderOffscreen()
+		fmt.Println("Buffer resized.")
 	}
 
-	screen.DrawImage(mainWin.offScreen, nil)
-
-	//since := time.Since(startTime).Nanoseconds()
-	//time.Sleep(time.Duration(16666-since) * time.Nanosecond)
+	op := &ebiten.DrawImageOptions{}
+	op.Filter = ebiten.FilterNearest
+	screen.DrawImage(mainWin.offScreen, op)
 }
