@@ -1,38 +1,4 @@
-##INPUT
-ANSI text line
+Need to handle word-wrapping, window resizing.
+Decide if we need faster resizing or faster scrollback.
+(slower resizing is probably fine)
 
-decode, strip ANSI/Control
-put colors and x/y positions into array for each color/style change.
-word-wrap, put into lines based on window size.
-Use static-size list, rotating buffer with index for newest line and oldest line.
-
-
-#OUTPUT
-fixed size list, rotating buffer
-pre-calculate draws per-line as they come in from decode, store.
-draw line "range", offset by scroll.
-
-Scroll starts at 0, > 0 moves up list.
-
-
-
-
-Packets come in, get added to a string, until we have have a line end.
-
-Then we decode ANSI and store the colors with where they are in the string, not counting ANSI codes. Store in rotating buffer.
-
-Then we word-wrap if needed, based on window size and all the font attributes. Store in a rotating buffer, oldest lines/colors fall off the end.
-(store colors per pre-word-wrapped line)
-
-Draw all the characters, with all the kerning/spacing math and colorize it. Store into rotating buffer by line.
-Then take the stored pre-rendered lines and put them on the screen, based on scroll position.
-
-On window resize, clear all the buffers and indexes, except the original ANSI decode. Re-run the whole process on all the scroll-back line-by-line, and resume normal operation.
-
-
-PROBLEMS:
-Lines that don't have a line end yet would be hidden        (prompts)
-processing incomplete lines will cause ANSI decode issues.
-
-SOLUTION:
-If  we find a split-up code, wait to process until newline or a packet without split-up codes.

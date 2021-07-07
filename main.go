@@ -70,8 +70,8 @@ type Window struct {
 
 	lines TextHistory
 
-	offscreenLock sync.Mutex
-	dirty         bool
+	offscreenLock  sync.Mutex
+	offScreenDirty bool
 }
 
 type TextHistory struct {
@@ -82,7 +82,6 @@ type TextHistory struct {
 	head     int
 	tail     int
 
-	dirty        bool
 	pixLinesLock sync.Mutex
 }
 
@@ -93,8 +92,6 @@ type FontData struct {
 	size       int
 	data       []byte
 	face       font.Face
-
-	dirty bool
 }
 
 //Globals
@@ -127,6 +124,7 @@ func renderText() {
 
 	head := mainWin.lines.head
 	tail := mainWin.lines.tail
+	dirty := false
 
 	swg := sizedwaitgroup.New((numThreads))
 
@@ -135,6 +133,7 @@ func renderText() {
 		go func(a int) {
 			if mainWin.lines.rendered[a] == false {
 				mainWin.lines.pixLines[a] = renderLine(a)
+				dirty = true
 			}
 			swg.Done()
 		}(a)
@@ -145,6 +144,11 @@ func renderText() {
 	//UNLOCK
 	mainWin.lines.pixLinesLock.Unlock()
 	//UNLOCK
+
+	//Remove this once viewportal logic is in
+	mainWin.offscreenLock.Lock()
+	mainWin.offScreenDirty = true
+	mainWin.offscreenLock.Unlock()
 }
 
 func renderLine(pos int) *ebiten.Image {
@@ -157,7 +161,6 @@ func renderLine(pos int) *ebiten.Image {
 			int(mainWin.font.size)+mainWin.font.vertSpace,
 			color.RGBA{0xFF, 0x00, 0x00, 0xFF})
 
-		mainWin.dirty = true
 		mainWin.lines.rendered[pos] = true
 		return tempImg
 	}
@@ -169,13 +172,9 @@ func (g *Game) Update() error {
 	return nil
 }
 
-func asyncUpdate() {
-	go func() {
-		for {
-			renderText()
-			renderOffscreen()
-		}
-	}()
+func updateNow() {
+	renderText()
+	renderOffscreen()
 }
 
 // repeatingKeyPressed return true when key is pressed considering the repeat state.
@@ -235,7 +234,7 @@ func init() {
 	mainWin.offscreenLock.Lock()
 	//LOCK
 	mainWin.offScreen = ebiten.NewImage(mainWin.width, mainWin.height)
-	mainWin.dirty = false
+	mainWin.offScreenDirty = false
 	//UNLOCK
 	mainWin.offscreenLock.Unlock()
 	//UNLOCK
@@ -244,7 +243,7 @@ func init() {
 	ebiten.SetWindowSize(mainWin.width, mainWin.height)
 	ebiten.SetMaxTPS(60)
 
-	asyncUpdate()
+	updateNow() //Only call when needed
 }
 
 func renderOffscreen() {
@@ -252,8 +251,8 @@ func renderOffscreen() {
 	//LOCK
 	mainWin.offscreenLock.Lock()
 	//LOCK
-	if mainWin.dirty {
-		mainWin.dirty = false
+	if mainWin.offScreenDirty {
+		mainWin.offScreenDirty = false
 		swg := sizedwaitgroup.New((numThreads))
 
 		mainWin.offScreen.Clear()
@@ -302,11 +301,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		mainWin.offScreen = ebiten.NewImage(sx, sy)
 
 		//Re-render
-		mainWin.dirty = true
+		mainWin.offScreenDirty = true
 		//UNLOCK
 		mainWin.offscreenLock.Unlock()
 		//UNLOCK
-		renderOffscreen()
+		go updateNow()
 		fmt.Println("Buffer resized.")
 		//LOCK
 		mainWin.offscreenLock.Lock()
