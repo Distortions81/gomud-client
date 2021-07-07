@@ -50,8 +50,6 @@ const defaultUserScale = 1.0
 const defaultRepeatInterval = 3
 const defaultRepeatDelay = 30
 
-var renderLock sync.Mutex
-
 type Window struct {
 	serverAddr  string
 	isConnected bool
@@ -71,7 +69,8 @@ type Window struct {
 
 	lines TextHistory
 
-	dirty bool
+	offscreenLock sync.Mutex
+	dirty         bool
 }
 
 type TextHistory struct {
@@ -81,6 +80,9 @@ type TextHistory struct {
 	pos      int
 	head     int
 	tail     int
+
+	dirty        bool
+	pixLinesLock sync.Mutex
 }
 
 type FontData struct {
@@ -118,7 +120,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func renderText() {
 	//LOCK
-	renderLock.Lock()
+	mainWin.lines.pixLinesLock.Lock()
 	//LOCK
 
 	head := mainWin.lines.head
@@ -133,7 +135,7 @@ func renderText() {
 	}
 
 	//UNLOCK
-	renderLock.Unlock()
+	mainWin.lines.pixLinesLock.Unlock()
 	//UNLOCK
 }
 
@@ -149,10 +151,7 @@ func renderLine(pos int) *ebiten.Image {
 
 		mainWin.dirty = true
 		mainWin.lines.rendered[pos] = true
-		fmt.Println("renderLine: good")
 		return tempImg
-	} else {
-		fmt.Println("renderLine: invalid size")
 	}
 	mainWin.lines.rendered[pos] = false
 	return nil
@@ -167,7 +166,7 @@ func asyncUpdate() {
 		for {
 			renderText()
 			renderOffscreen()
-			time.Sleep(1 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		}
 	}()
 }
@@ -221,8 +220,14 @@ func init() {
 	mainWin.lines.head = 3
 	mainWin.lines.tail = 0
 
+	//LOCK
+	mainWin.offscreenLock.Lock()
+	//LOCK
 	mainWin.offScreen = ebiten.NewImage(mainWin.width, mainWin.height)
 	mainWin.dirty = false
+	//UNLOCK
+	mainWin.offscreenLock.Unlock()
+	//UNLOCK
 
 	ebiten.SetWindowTitle(mainWin.title)
 	ebiten.SetWindowSize(mainWin.width, mainWin.height)
@@ -232,15 +237,19 @@ func init() {
 }
 
 func renderOffscreen() {
+
+	//LOCK
+	mainWin.offscreenLock.Lock()
+	//LOCK
 	if mainWin.dirty {
-		//LOCK
-		renderLock.Lock()
-		//LOCK
 		mainWin.dirty = false
 
 		mainWin.offScreen.Clear()
 		mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
 
+		//LOCK
+		mainWin.lines.pixLinesLock.Lock()
+		//LOCK
 		//Render our images out here
 		head := mainWin.lines.head
 		tail := mainWin.lines.tail
@@ -251,18 +260,24 @@ func renderOffscreen() {
 				op.Filter = ebiten.FilterNearest
 				op.GeoM.Translate(0.0, float64(a*mainWin.font.charHeight))
 				mainWin.offScreen.DrawImage(mainWin.lines.pixLines[a], op)
-			} else {
-				fmt.Println("renderOffsreen: Nothing to draw.")
 			}
 		}
 		//UNLOCK
-		renderLock.Unlock()
+		mainWin.lines.pixLinesLock.Unlock()
 		//UNLOCK
 	}
+	//UNLOCK
+	mainWin.offscreenLock.Unlock()
+	//UNLOCK
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
 
+	//LOCK
+	mainWin.offscreenLock.Lock()
+	//LOCK
+
+	//Resize, or hidpi detected
 	sx, sy := screen.Size()
 	if mainWin.realWidth != sx || mainWin.realHeight != sy {
 		mainWin.realWidth = sx
@@ -271,11 +286,22 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 		//Re-render
 		mainWin.dirty = true
+		//UNLOCK
+		mainWin.offscreenLock.Unlock()
+		//UNLOCK
 		renderOffscreen()
 		fmt.Println("Buffer resized.")
+		//LOCK
+		mainWin.offscreenLock.Lock()
+		//LOCK
+
 	}
 
 	op := &ebiten.DrawImageOptions{}
 	op.Filter = ebiten.FilterNearest
+
 	screen.DrawImage(mainWin.offScreen, op)
+	//UNLOCK
+	mainWin.offscreenLock.Unlock()
+	//UNLOCK
 }
