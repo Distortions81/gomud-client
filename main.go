@@ -6,14 +6,15 @@ import (
 	"image/color"
 	"log"
 	"math"
+	"runtime"
 	"sync"
-	"time"
 
 	_ "github.com/flopp/go-findfont"
 	"github.com/golang/freetype/truetype"
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/inpututil"
 	"github.com/hajimehoshi/ebiten/text"
+	"github.com/remeh/sizedwaitgroup"
 	"golang.org/x/image/font"
 )
 
@@ -99,6 +100,7 @@ type FontData struct {
 //Globals
 var tt *truetype.Font
 var mainWin Window
+var numThreads int = 1
 
 type Game struct {
 	//
@@ -125,14 +127,20 @@ func renderText() {
 
 	head := mainWin.lines.head
 	tail := mainWin.lines.tail
+
+	swg := sizedwaitgroup.New((numThreads))
+
 	for a := tail; a <= head && a >= tail; a++ {
-		if mainWin.lines.rendered[a] == false {
-			go func(a int) {
+		swg.Add()
+		go func(a int) {
+			if mainWin.lines.rendered[a] == false {
 				mainWin.lines.pixLines[a] = renderLine(a)
-			}(a)
-		}
+			}
+			swg.Done()
+		}(a)
 
 	}
+	swg.Wait()
 
 	//UNLOCK
 	mainWin.lines.pixLinesLock.Unlock()
@@ -166,7 +174,6 @@ func asyncUpdate() {
 		for {
 			renderText()
 			renderOffscreen()
-			time.Sleep(10 * time.Millisecond)
 		}
 	}()
 }
@@ -191,6 +198,10 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	numThreads = runtime.NumCPU()
+	buf := fmt.Sprintf("%d vCPUs found.", numThreads)
+	fmt.Println(buf)
 
 	mainWin.serverAddr = defaultServer
 	mainWin.isConnected = false
@@ -243,6 +254,7 @@ func renderOffscreen() {
 	//LOCK
 	if mainWin.dirty {
 		mainWin.dirty = false
+		swg := sizedwaitgroup.New((numThreads))
 
 		mainWin.offScreen.Clear()
 		mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
@@ -255,13 +267,18 @@ func renderOffscreen() {
 		tail := mainWin.lines.tail
 		for a := tail; a <= head && a >= tail; a++ {
 
-			if mainWin.lines.rendered[a] == true {
-				op := &ebiten.DrawImageOptions{}
-				op.Filter = ebiten.FilterNearest
-				op.GeoM.Translate(0.0, float64(a*mainWin.font.charHeight))
-				mainWin.offScreen.DrawImage(mainWin.lines.pixLines[a], op)
-			}
+			swg.Add()
+			go func(a int) {
+				if mainWin.lines.rendered[a] == true {
+					op := &ebiten.DrawImageOptions{}
+					op.Filter = ebiten.FilterNearest
+					op.GeoM.Translate(0.0, float64(a*mainWin.font.charHeight))
+					mainWin.offScreen.DrawImage(mainWin.lines.pixLines[a], op)
+				}
+				swg.Done()
+			}(a)
 		}
+		swg.Wait()
 		//UNLOCK
 		mainWin.lines.pixLinesLock.Unlock()
 		//UNLOCK
