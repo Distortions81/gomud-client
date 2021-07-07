@@ -1,4 +1,16 @@
 Need to handle word-wrapping, window resizing.
-Decide if we need faster resizing or faster scrollback.
-(slower resizing is probably fine)
+
+Viewportal calculation should mark offscreen dirty when there is a change.
+UPDATE: remove offscreen dirty flag, and only call offscreen draw explicitly at end.
+
+ALSO: remove pixlines dirty flag, only attempt to draw pixlines when called explicitly, when text received or window resized, limit to X items before releasing lock and sleeping.
+SPEEDUP: render to temporary local, lock and copy at end to reduce locked time?
+
+Need to handle scrollback rotating buffer, maybe just give every line a seqential number?
+Delete current line cache number - max scrollback cache number
+Rendering should always be done newest to oldest history.
+
+
+Add settings JSON, start work on bookmark/settings/input UI.
+Add support for system fonts.
 
