@@ -1,12 +1,14 @@
 package main
 
 import (
+	"crypto/tls"
 	_ "embed"
 	"fmt"
 	"image/color"
 	"log"
 	"math"
 	"runtime"
+	"strings"
 	"sync"
 
 	_ "github.com/flopp/go-findfont"
@@ -39,7 +41,7 @@ const MAX_VIEW_LINES = 512
 
 const defaultWindowTitle = "GoMud-Client"
 const defaultServer = "127.0.0.1:7778"
-const VersionString = "Pre-Alpha build, v0.0.02 07052021937p"
+const VersionString = "Pre-Alpha build, v0.0.03 07082021-0111a"
 
 const defaultHorizontalSpaceRatio = 1.5
 const DefaultVerticalSpace = 2.0
@@ -52,9 +54,11 @@ const defaultRepeatInterval = 3
 const defaultRepeatDelay = 30
 
 type Window struct {
+	sslCon      *tls.Conn
 	serverAddr  string
 	isConnected bool
-	offScreen   *ebiten.Image
+
+	offScreen *ebiten.Image
 
 	title      string
 	width      int
@@ -75,6 +79,7 @@ type Window struct {
 }
 
 type TextHistory struct {
+	rawText  string
 	lines    [MAX_SCROLL_LINES]string
 	pixLines [MAX_SCROLL_LINES]*ebiten.Image
 	rendered [MAX_SCROLL_LINES]bool
@@ -222,12 +227,9 @@ func init() {
 	mainWin.font.charWidth = int(math.Round(float64(mainWin.font.size) / float64(defaultHorizontalSpaceRatio)))
 	mainWin.font.charHeight = int(math.Round(float64(mainWin.font.size) + float64(mainWin.font.vertSpace)))
 
-	mainWin.lines.lines[0] = "This"
-	mainWin.lines.lines[1] = "is"
-	mainWin.lines.lines[2] = "a"
-	mainWin.lines.lines[3] = "test"
+	mainWin.lines.lines[0] = ""
 	mainWin.lines.pos = 0
-	mainWin.lines.head = 3
+	mainWin.lines.head = 0
 	mainWin.lines.tail = 0
 
 	//LOCK
@@ -241,9 +243,15 @@ func init() {
 
 	ebiten.SetWindowTitle(mainWin.title)
 	ebiten.SetWindowSize(mainWin.width, mainWin.height)
+
+	ebiten.SetWindowResizable(true)
+	ebiten.SetVsyncEnabled(false)
 	ebiten.SetMaxTPS(60)
+	ebiten.SetRunnableOnUnfocused(true)
 
 	updateNow() //Only call when needed
+	DialSSL(defaultServer)
+	go readNet()
 }
 
 func renderOffscreen() {
@@ -320,4 +328,65 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	//UNLOCK
 	mainWin.offscreenLock.Unlock()
 	//UNLOCK
+}
+
+func DialSSL(addr string) {
+
+	buf := fmt.Sprintf("Connecting to: %s\r\n", addr)
+	addLine(buf)
+
+	//Todo, allow timeout adjustment and connection canceling.
+	conf := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+
+	conn, err := tls.Dial("tcp", addr, conf)
+	if err != nil {
+		log.Println(err)
+
+		buf := fmt.Sprintf("%s\r\n", err)
+		addLine(buf)
+		return
+	}
+	mainWin.sslCon = conn
+}
+
+func addLine(text string) {
+	mainWin.lines.rawText += text
+	//fmt.Println(": " + text)
+	textToLines()
+}
+
+func textToLines() {
+	lines := strings.Split(mainWin.lines.rawText, "\n")
+	numLines := len(lines) - 1
+
+	x := 0
+	for i := mainWin.lines.head + 1; i < MAX_SCROLL_LINES && x <= numLines; i++ {
+		mainWin.lines.lines[i] = lines[x]
+		x++
+	}
+
+	mainWin.lines.head += x
+	mainWin.lines.rawText = ""
+	updateNow()
+}
+
+func readNet() {
+	for {
+		buf := make([]byte, MAX_INPUT_LENGTH)
+		if mainWin.sslCon != nil {
+			n, err := mainWin.sslCon.Read(buf)
+			if err != nil {
+				log.Println(n, err)
+				mainWin.sslCon.Close()
+
+				buf := fmt.Sprintf("Lost connection to %s: %s\r\n", mainWin.serverAddr, err)
+				addLine(buf)
+				mainWin.sslCon = nil
+			}
+			newData := string(buf[:n])
+			addLine(newData)
+		}
+	}
 }
