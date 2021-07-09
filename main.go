@@ -102,6 +102,7 @@ type FontData struct {
 var tt *truetype.Font
 var mainWin Window
 var numThreads int = 1
+var ebitenLock sync.Mutex
 
 type Game struct {
 	counter uint64
@@ -183,6 +184,9 @@ func ansiColor(t string) []support.ANSIData {
 func renderLine(pos int) *ebiten.Image {
 	if mainWin.realWidth > 0 && mainWin.font.size > 0 {
 		len := len(mainWin.lines.lines[pos])
+		ebitenLock.Lock()
+		defer ebitenLock.Unlock()
+
 		tempImg := ebiten.NewImage(mainWin.realWidth, int(math.Round(mainWin.font.size+mainWin.font.vertSpace)))
 		x := 0
 		for i := 0; i < len; i++ {
@@ -304,6 +308,9 @@ func init() {
 func renderOffscreen() {
 
 	if mainWin.dirty == false { //Check for no pending frame
+		ebitenLock.Lock()
+		defer ebitenLock.Unlock()
+
 		mainWin.offScreen.Clear()
 		//mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
 
