@@ -1,5 +1,7 @@
 package support
 
+const MAX_LINE_LENGTH = 1024 * 1024
+
 type ANSIData struct {
 	Red   uint16
 	Green uint16

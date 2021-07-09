@@ -9,14 +9,13 @@ import (
 	"math"
 	"runtime"
 	"strings"
-	"sync"
 
+	"./support"
 	_ "github.com/flopp/go-findfont"
 	"github.com/golang/freetype/truetype"
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/inpututil"
 	"github.com/hajimehoshi/ebiten/text"
-	"github.com/remeh/sizedwaitgroup"
 	"golang.org/x/image/font"
 )
 
@@ -26,25 +25,25 @@ import (
 var defaultFont []byte
 
 const glyphCacheSize = 256
-const defaultFontSize = 18
+const defaultFontSize = 18.0
 
 //default greeting
 //go:embed "greet.txt"
 var greeting []byte
 
 //Constants
-const MAX_INPUT_LENGTH = 1024 * 100
-const MAX_LINE_LENGTH = 1024
+const MAX_INPUT_LENGTH = 1024 * 1024 //Some kind of reasonable limit
+const MAX_LINE_LENGTH = 1024 * 10    //Larger than needed, for ANSI codes.
 
-const MAX_SCROLL_LINES = 10000
-const MAX_VIEW_LINES = 512
+const MAX_SCROLL_LINES = 10000 //Max scrollback
+const MAX_VIEW_LINES = 512     //Maximum lines on screen
 
 const defaultWindowTitle = "GoMud-Client"
 const defaultServer = "127.0.0.1:7778"
 const VersionString = "Pre-Alpha build, v0.0.03 07082021-0111a"
 
-const defaultHorizontalSpaceRatio = 1.5
-const DefaultVerticalSpace = 2.0
+const defaultHorizontalSpace = 1.4
+const defaultVerticalSpace = 4.0
 
 const defaultWindowWidth = 960
 const defaultWindowHeight = 540
@@ -73,28 +72,23 @@ type Window struct {
 	repeatInterval int
 
 	lines TextHistory
-
-	offscreenLock  sync.Mutex
-	offScreenDirty bool
 }
 
 type TextHistory struct {
 	rawText  string
 	lines    [MAX_SCROLL_LINES]string
+	colors   [MAX_SCROLL_LINES][]support.ANSIData
 	pixLines [MAX_SCROLL_LINES]*ebiten.Image
-	rendered [MAX_SCROLL_LINES]bool
 	pos      int
 	head     int
 	tail     int
-
-	pixLinesLock sync.Mutex
 }
 
 type FontData struct {
-	vertSpace  int
-	charWidth  int
-	charHeight int
-	size       int
+	vertSpace  float64
+	charWidth  float64
+	charHeight float64
+	size       float64
 	data       []byte
 	face       font.Face
 }
@@ -123,53 +117,67 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func renderText() {
-	//LOCK
-	mainWin.lines.pixLinesLock.Lock()
-	//LOCK
-
 	head := mainWin.lines.head
 	tail := mainWin.lines.tail
-	dirty := false
-
-	swg := sizedwaitgroup.New((numThreads))
 
 	for a := tail; a <= head && a >= tail; a++ {
-		swg.Add()
-		go func(a int) {
-			if mainWin.lines.rendered[a] == false {
-				mainWin.lines.pixLines[a] = renderLine(a)
-				dirty = true
-			}
-			swg.Done()
-		}(a)
+		if mainWin.lines.pixLines[a] == nil {
+			mainWin.lines.pixLines[a] = renderLine(a)
+		}
 
 	}
-	swg.Wait()
+}
 
-	//UNLOCK
-	mainWin.lines.pixLinesLock.Unlock()
-	//UNLOCK
+func ansiColor(t string) []support.ANSIData {
+	textLen := len(t)
+	foundColor := false               //Mark when color code starts
+	colorStart := 0                   //Color code start position
+	colorEnd := 0                     //Color code end position
+	drawColor := support.ANSI_DEFAULT //Var to store the colors
 
-	//Remove this once viewportal logic is in
-	mainWin.offscreenLock.Lock()
-	mainWin.offScreenDirty = true
-	mainWin.offscreenLock.Unlock()
+	//Only alloc what we need
+	textColors := make([]support.ANSIData, textLen+1)
+
+	for z := 0; z < textLen; z++ { //Loop through all chars
+		if t[z] == '\033' {
+			foundColor = true                    //Found ANSI escape code
+			colorStart = z                       //Record start pos
+			textColors[z] = support.ANSI_CONTROL //Mark this as no-draw
+			continue
+		} else if z-colorStart > 10 { //Bail, this isn't a valid color code
+			foundColor = false
+		} else if foundColor && t[z] == 'm' { //Color code end
+			colorEnd = z
+			foundColor = false
+			if z+1 < textLen { //Make sure we dont run off the end of the string
+				drawColor = support.DecodeANSI(t[colorStart : colorEnd+1])
+				textColors[z+1] = drawColor //Set color
+			}
+			textColors[z] = support.ANSI_CONTROL //Mark code end as so
+			continue
+		}
+		if foundColor {
+			textColors[z] = support.ANSI_CONTROL //Not valid
+		} else {
+			textColors[z] = drawColor //Mark all characters with current color
+		}
+	}
+	return textColors
 }
 
 func renderLine(pos int) *ebiten.Image {
 	if mainWin.realWidth > 0 && mainWin.font.size > 0 {
-
-		tempImg := ebiten.NewImage(mainWin.realWidth, int(mainWin.font.size)+mainWin.font.vertSpace)
-		text.Draw(tempImg, mainWin.lines.lines[pos],
-			mainWin.font.face,
-			mainWin.font.size,
-			int(mainWin.font.size)+mainWin.font.vertSpace,
-			color.RGBA{0xFF, 0x00, 0x00, 0xFF})
-
-		mainWin.lines.rendered[pos] = true
+		len := len(mainWin.lines.lines[pos])
+		tempImg := ebiten.NewImage(mainWin.realWidth, int(math.Round(mainWin.font.size+mainWin.font.vertSpace)))
+		for i := 0; i < len; i++ {
+			text.Draw(tempImg, string(mainWin.lines.lines[pos][i]),
+				mainWin.font.face,
+				int(math.Round(float64(i)*mainWin.font.charWidth)),
+				int(math.Round(mainWin.font.size)),
+				color.RGBA64{mainWin.lines.colors[pos][i].Red, mainWin.lines.colors[pos][i].Green, mainWin.lines.colors[pos][i].Blue, 0xFFFF})
+		}
 		return tempImg
 	}
-	mainWin.lines.rendered[pos] = false
 	return nil
 }
 
@@ -223,24 +231,16 @@ func init() {
 	})
 
 	//Font setup
-	mainWin.font.vertSpace = mainWin.font.size / DefaultVerticalSpace
-	mainWin.font.charWidth = int(math.Round(float64(mainWin.font.size) / float64(defaultHorizontalSpaceRatio)))
-	mainWin.font.charHeight = int(math.Round(float64(mainWin.font.size) + float64(mainWin.font.vertSpace)))
+	mainWin.font.vertSpace = mainWin.font.size / defaultVerticalSpace
+	mainWin.font.charWidth = mainWin.font.size / defaultHorizontalSpace
+	mainWin.font.charHeight = mainWin.font.size + mainWin.font.vertSpace
 
 	mainWin.lines.lines[0] = ""
 	mainWin.lines.pos = 0
 	mainWin.lines.head = 0
 	mainWin.lines.tail = 0
 
-	//LOCK
-	mainWin.offscreenLock.Lock()
-	//LOCK
 	mainWin.offScreen = ebiten.NewImage(mainWin.width, mainWin.height)
-	mainWin.offScreenDirty = false
-	//UNLOCK
-	mainWin.offscreenLock.Unlock()
-	//UNLOCK
-
 	ebiten.SetWindowTitle(mainWin.title)
 	ebiten.SetWindowSize(mainWin.width, mainWin.height)
 
@@ -256,50 +256,24 @@ func init() {
 
 func renderOffscreen() {
 
-	//LOCK
-	mainWin.offscreenLock.Lock()
-	//LOCK
-	if mainWin.offScreenDirty {
-		mainWin.offScreenDirty = false
-		swg := sizedwaitgroup.New((numThreads))
+	mainWin.offScreen.Clear()
+	mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
 
-		mainWin.offScreen.Clear()
-		mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
+	//Render our images out here
+	head := mainWin.lines.head
+	tail := mainWin.lines.tail
+	for a := tail; a <= head && a >= tail; a++ {
 
-		//LOCK
-		mainWin.lines.pixLinesLock.Lock()
-		//LOCK
-		//Render our images out here
-		head := mainWin.lines.head
-		tail := mainWin.lines.tail
-		for a := tail; a <= head && a >= tail; a++ {
-
-			swg.Add()
-			go func(a int) {
-				if mainWin.lines.rendered[a] == true {
-					op := &ebiten.DrawImageOptions{}
-					op.Filter = ebiten.FilterNearest
-					op.GeoM.Translate(0.0, float64(a*mainWin.font.charHeight))
-					mainWin.offScreen.DrawImage(mainWin.lines.pixLines[a], op)
-				}
-				swg.Done()
-			}(a)
+		if mainWin.lines.pixLines[a] != nil {
+			op := &ebiten.DrawImageOptions{}
+			op.Filter = ebiten.FilterNearest
+			op.GeoM.Translate(0.0, float64(a)*mainWin.font.charHeight)
+			mainWin.offScreen.DrawImage(mainWin.lines.pixLines[a], op)
 		}
-		swg.Wait()
-		//UNLOCK
-		mainWin.lines.pixLinesLock.Unlock()
-		//UNLOCK
 	}
-	//UNLOCK
-	mainWin.offscreenLock.Unlock()
-	//UNLOCK
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-
-	//LOCK
-	mainWin.offscreenLock.Lock()
-	//LOCK
 
 	//Resize, or hidpi detected
 	sx, sy := screen.Size()
@@ -308,26 +282,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		mainWin.realHeight = sy
 		mainWin.offScreen = ebiten.NewImage(sx, sy)
 
-		//Re-render
-		mainWin.offScreenDirty = true
-		//UNLOCK
-		mainWin.offscreenLock.Unlock()
-		//UNLOCK
-		go updateNow()
+		updateNow()
 		fmt.Println("Buffer resized.")
-		//LOCK
-		mainWin.offscreenLock.Lock()
-		//LOCK
-
 	}
 
 	op := &ebiten.DrawImageOptions{}
 	op.Filter = ebiten.FilterNearest
 
 	screen.DrawImage(mainWin.offScreen, op)
-	//UNLOCK
-	mainWin.offscreenLock.Unlock()
-	//UNLOCK
 }
 
 func DialSSL(addr string) {
@@ -353,7 +315,6 @@ func DialSSL(addr string) {
 
 func addLine(text string) {
 	mainWin.lines.rawText += text
-	//fmt.Println(": " + text)
 	textToLines()
 }
 
@@ -364,6 +325,7 @@ func textToLines() {
 	x := 0
 	for i := mainWin.lines.head + 1; i < MAX_SCROLL_LINES && x <= numLines; i++ {
 		mainWin.lines.lines[i] = lines[x]
+		mainWin.lines.colors[i] = ansiColor(lines[x])
 		x++
 	}
 
