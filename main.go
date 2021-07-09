@@ -9,6 +9,7 @@ import (
 	"math"
 	"runtime"
 	"strings"
+	"sync"
 
 	"./support"
 	_ "github.com/flopp/go-findfont"
@@ -75,13 +76,16 @@ type Window struct {
 }
 
 type TextHistory struct {
-	rawText  string
+	rawText     string
+	rawTextLock sync.Mutex
+
 	lines    [MAX_SCROLL_LINES]string
 	colors   [MAX_SCROLL_LINES][]support.ANSIData
 	pixLines [MAX_SCROLL_LINES]*ebiten.Image
-	pos      int
-	head     int
-	tail     int
+
+	pos  int
+	head int
+	tail int
 }
 
 type FontData struct {
@@ -117,6 +121,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func renderText() {
+
 	head := mainWin.lines.head
 	tail := mainWin.lines.tail
 
@@ -186,6 +191,7 @@ func (g *Game) Update() error {
 }
 
 func updateNow() {
+	textToLines()
 	renderText()
 	renderOffscreen()
 }
@@ -251,7 +257,7 @@ func init() {
 
 	updateNow() //Only call when needed
 	DialSSL(defaultServer)
-	go readNet()
+	readNet()
 }
 
 func renderOffscreen() {
@@ -271,6 +277,7 @@ func renderOffscreen() {
 			mainWin.offScreen.DrawImage(mainWin.lines.pixLines[a], op)
 		}
 	}
+
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -314,41 +321,51 @@ func DialSSL(addr string) {
 }
 
 func addLine(text string) {
-	mainWin.lines.rawText += text
-	textToLines()
+
+	go func() {
+		mainWin.lines.rawTextLock.Lock()
+		mainWin.lines.rawText += text
+		mainWin.lines.rawTextLock.Unlock()
+	}()
 }
 
 func textToLines() {
+	mainWin.lines.rawTextLock.Lock()
 	lines := strings.Split(mainWin.lines.rawText, "\n")
+	mainWin.lines.rawTextLock.Unlock()
+
 	numLines := len(lines) - 1
+	if numLines > 0 {
 
-	x := 0
-	for i := mainWin.lines.head + 1; i < MAX_SCROLL_LINES && x <= numLines; i++ {
-		mainWin.lines.lines[i] = lines[x]
-		mainWin.lines.colors[i] = ansiColor(lines[x])
-		x++
+		x := 0
+		for i := mainWin.lines.head + 1; i < MAX_SCROLL_LINES && x <= numLines; i++ {
+			mainWin.lines.lines[i] = lines[x]
+			mainWin.lines.colors[i] = ansiColor(lines[x])
+			x++
+		}
+		mainWin.lines.head += x
+		mainWin.lines.rawText = ""
+		updateNow()
 	}
-
-	mainWin.lines.head += x
-	mainWin.lines.rawText = ""
-	updateNow()
 }
 
 func readNet() {
-	for {
-		buf := make([]byte, MAX_INPUT_LENGTH)
-		if mainWin.sslCon != nil {
-			n, err := mainWin.sslCon.Read(buf)
-			if err != nil {
-				log.Println(n, err)
-				mainWin.sslCon.Close()
+	go func() {
+		for {
+			buf := make([]byte, MAX_INPUT_LENGTH)
+			if mainWin.sslCon != nil {
+				n, err := mainWin.sslCon.Read(buf)
+				if err != nil {
+					log.Println(n, err)
+					mainWin.sslCon.Close()
 
-				buf := fmt.Sprintf("Lost connection to %s: %s\r\n", mainWin.serverAddr, err)
-				addLine(buf)
-				mainWin.sslCon = nil
+					buf := fmt.Sprintf("Lost connection to %s: %s\r\n", mainWin.serverAddr, err)
+					addLine(buf)
+					mainWin.sslCon = nil
+				}
+				newData := string(buf[:n])
+				addLine(newData)
 			}
-			newData := string(buf[:n])
-			addLine(newData)
 		}
-	}
+	}()
 }
