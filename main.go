@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,21 +31,17 @@ const glyphCacheSize = 256
 const defaultFontSize = 18.0
 const clearEveryFrame = true
 
-//default greeting
-//go:embed "greet.txt"
-var greeting []byte
-
 //Constants
 const MAX_INPUT_LENGTH = 1024 * 1024 //Some kind of reasonable limit
 const MAX_LINE_LENGTH = 1024 * 10    //Larger than needed, for ANSI codes.
-const NET_POLL_MS = 100
+const NET_POLL_MS = 66               //1/15th of a second
 
 const MAX_SCROLL_LINES = 10000 //Max scrollback
 const MAX_VIEW_LINES = 512     //Maximum lines on screen
 
 const defaultWindowTitle = "GoMud-Client"
 const defaultServer = "127.0.0.1:7778"
-const VersionString = "Pre-Alpha build, v0.0.03 07082021-0111a"
+const VersionString = "Pre-Alpha build, v0.0.031 07092021-1201a"
 
 const defaultHorizontalSpace = 1.4
 const defaultVerticalSpace = 4.0
@@ -187,12 +184,16 @@ func renderLine(pos int) *ebiten.Image {
 	if mainWin.realWidth > 0 && mainWin.font.size > 0 {
 		len := len(mainWin.lines.lines[pos])
 		tempImg := ebiten.NewImage(mainWin.realWidth, int(math.Round(mainWin.font.size+mainWin.font.vertSpace)))
+		x := 0
 		for i := 0; i < len; i++ {
-			text.Draw(tempImg, string(mainWin.lines.lines[pos][i]),
-				mainWin.font.face,
-				int(math.Round(float64(i)*mainWin.font.charWidth)),
-				int(math.Round(mainWin.font.size)),
-				color.RGBA64{mainWin.lines.colors[pos][i].Red, mainWin.lines.colors[pos][i].Green, mainWin.lines.colors[pos][i].Blue, 0xFFFF})
+			if strconv.IsPrint(rune(mainWin.lines.lines[pos][i])) && mainWin.lines.colors[pos][i] != support.ANSI_CONTROL {
+				x++
+				text.Draw(tempImg, string(mainWin.lines.lines[pos][i]),
+					mainWin.font.face,
+					int(math.Round(float64(x)*mainWin.font.charWidth)),
+					int(math.Round(mainWin.font.size)),
+					color.RGBA64{mainWin.lines.colors[pos][i].Red, mainWin.lines.colors[pos][i].Green, mainWin.lines.colors[pos][i].Blue, 0xFFFF})
+			}
 		}
 		return tempImg
 	}
@@ -287,6 +288,13 @@ func init() {
 		ebiten.SetScreenClearedEveryFrame(false)
 	}
 
+	addLine(
+		"GOMud-Client " + VersionString + "\n" +
+			"COPYRIGHT 2020-2021 Carl Frank Otto III (carlotto81@gmail.com), License: MIT\n" +
+			"Written in Go, using Ebiten library.\n" +
+			"This information must remain unmodified, fully intact and shown to end-users.\n" +
+			"Source: https://github.com/Distortions81/gomud-client\n" +
+			"\n")
 	updateNow() //Only call when needed
 	DialSSL(defaultServer)
 	readNet()
@@ -296,7 +304,7 @@ func renderOffscreen() {
 
 	if mainWin.dirty == false { //Check for no pending frame
 		mainWin.offScreen.Clear()
-		mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
+		//mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
 
 		//Render our images out here
 		head := mainWin.lines.head
