@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"./support"
 	_ "github.com/flopp/go-findfont"
@@ -27,6 +28,7 @@ var defaultFont []byte
 
 const glyphCacheSize = 256
 const defaultFontSize = 18.0
+const clearEveryFrame = true
 
 //default greeting
 //go:embed "greet.txt"
@@ -35,6 +37,7 @@ var greeting []byte
 //Constants
 const MAX_INPUT_LENGTH = 1024 * 1024 //Some kind of reasonable limit
 const MAX_LINE_LENGTH = 1024 * 10    //Larger than needed, for ANSI codes.
+const NET_POLL_MS = 100
 
 const MAX_SCROLL_LINES = 10000 //Max scrollback
 const MAX_VIEW_LINES = 512     //Maximum lines on screen
@@ -73,6 +76,7 @@ type Window struct {
 	repeatInterval int
 
 	lines TextHistory
+	dirty bool
 }
 
 type TextHistory struct {
@@ -103,7 +107,7 @@ var mainWin Window
 var numThreads int = 1
 
 type Game struct {
-	//
+	counter uint64
 }
 
 func main() {
@@ -113,6 +117,8 @@ func main() {
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
+
+	game.counter = 0
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -122,14 +128,21 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func renderText() {
 
+	didRender := false
+
 	head := mainWin.lines.head
 	tail := mainWin.lines.tail
 
 	for a := tail; a <= head && a >= tail; a++ {
 		if mainWin.lines.pixLines[a] == nil {
 			mainWin.lines.pixLines[a] = renderLine(a)
+			didRender = true
 		}
 
+	}
+
+	if didRender {
+		renderOffscreen()
 	}
 }
 
@@ -187,13 +200,25 @@ func renderLine(pos int) *ebiten.Image {
 }
 
 func (g *Game) Update() error {
-	return nil
+
+	if clearEveryFrame == false {
+		g.counter++
+
+		//Force update 2 times a second
+		if g.counter%30 == 0 {
+			updateNow()
+		}
+		return nil
+
+	} else {
+		updateNow()
+		return nil
+	}
 }
 
 func updateNow() {
 	textToLines()
 	renderText()
-	renderOffscreen()
 }
 
 // repeatingKeyPressed return true when key is pressed considering the repeat state.
@@ -246,6 +271,8 @@ func init() {
 	mainWin.lines.head = 0
 	mainWin.lines.tail = 0
 
+	mainWin.dirty = false
+
 	mainWin.offScreen = ebiten.NewImage(mainWin.width, mainWin.height)
 	ebiten.SetWindowTitle(mainWin.title)
 	ebiten.SetWindowSize(mainWin.width, mainWin.height)
@@ -254,6 +281,11 @@ func init() {
 	ebiten.SetVsyncEnabled(false)
 	ebiten.SetMaxTPS(60)
 	ebiten.SetRunnableOnUnfocused(true)
+	if clearEveryFrame == true {
+		ebiten.SetScreenClearedEveryFrame(true)
+	} else {
+		ebiten.SetScreenClearedEveryFrame(false)
+	}
 
 	updateNow() //Only call when needed
 	DialSSL(defaultServer)
@@ -262,20 +294,23 @@ func init() {
 
 func renderOffscreen() {
 
-	mainWin.offScreen.Clear()
-	mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
+	if mainWin.dirty == false { //Check for no pending frame
+		mainWin.offScreen.Clear()
+		mainWin.offScreen.Fill(color.RGBA{0x30, 0x00, 0x00, 0xFF})
 
-	//Render our images out here
-	head := mainWin.lines.head
-	tail := mainWin.lines.tail
-	for a := tail; a <= head && a >= tail; a++ {
+		//Render our images out here
+		head := mainWin.lines.head
+		tail := mainWin.lines.tail
+		for a := tail; a <= head && a >= tail; a++ {
 
-		if mainWin.lines.pixLines[a] != nil {
-			op := &ebiten.DrawImageOptions{}
-			op.Filter = ebiten.FilterNearest
-			op.GeoM.Translate(0.0, float64(a)*mainWin.font.charHeight)
-			mainWin.offScreen.DrawImage(mainWin.lines.pixLines[a], op)
+			if mainWin.lines.pixLines[a] != nil {
+				op := &ebiten.DrawImageOptions{}
+				op.Filter = ebiten.FilterNearest
+				op.GeoM.Translate(0.0, float64(a)*mainWin.font.charHeight)
+				mainWin.offScreen.DrawImage(mainWin.lines.pixLines[a], op)
+			}
 		}
+		mainWin.dirty = true
 	}
 
 }
@@ -290,13 +325,20 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		mainWin.offScreen = ebiten.NewImage(sx, sy)
 
 		updateNow()
+		mainWin.dirty = false
+		for x := 0; x < MAX_SCROLL_LINES; x++ {
+			mainWin.lines.pixLines[x] = nil
+		}
 		fmt.Println("Buffer resized.")
 	}
 
-	op := &ebiten.DrawImageOptions{}
-	op.Filter = ebiten.FilterNearest
+	if mainWin.dirty == true || clearEveryFrame {
+		mainWin.dirty = false
+		op := &ebiten.DrawImageOptions{}
+		op.Filter = ebiten.FilterNearest
 
-	screen.DrawImage(mainWin.offScreen, op)
+		screen.DrawImage(mainWin.offScreen, op)
+	}
 }
 
 func DialSSL(addr string) {
@@ -366,6 +408,7 @@ func readNet() {
 				newData := string(buf[:n])
 				addLine(newData)
 			}
+			time.Sleep(time.Millisecond * NET_POLL_MS)
 		}
 	}()
 }

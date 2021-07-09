@@ -78,6 +78,8 @@ type Window struct {
 	InputLine  string
 
 	Con *tls.Conn
+
+	dirty bool
 }
 
 //Scroll
