@@ -1,14 +1,11 @@
 package support
 
-const MAX_LINE_LENGTH = 1024 * 1024
-
 type ANSIData struct {
-	Red   uint16
-	Green uint16
-	Blue  uint16
-	Alpha uint16
+	Red   uint8
+	Green uint8
+	Blue  uint8
 
-	Style int
+	Style uint8
 }
 
 const ANSI_STYLE_RESET = 0
@@ -19,32 +16,32 @@ const ANSI_STYLE_STRIKE = 4
 const ANSI_STYLE_ERROR = 5
 const ANSI_STYLE_CONTROL = 6
 
-var ANSI_CONTROL = ANSIData{Style: ANSI_STYLE_CONTROL, Red: 0xAAAA}
-var ANSI_RESET = ANSIData{Style: ANSI_STYLE_RESET, Red: 0xFFFF, Green: 0xFFFF, Blue: 0xFFFF}
+var ANSI_CONTROL = ANSIData{Style: ANSI_STYLE_CONTROL, Red: 0xAA}
+var ANSI_RESET = ANSIData{Style: ANSI_STYLE_RESET, Red: 0xFF, Green: 0xFF, Blue: 0xFF}
 var ANSI_ITALIC = ANSIData{Style: ANSI_STYLE_ITALIC}
 var ANSI_UNDERLINE = ANSIData{Style: ANSI_STYLE_UNDERLINE}
 var ANSI_INVERSE = ANSIData{Style: ANSI_STYLE_INVERSE}
 var ANSI_STRIKE = ANSIData{Style: ANSI_STYLE_STRIKE}
-var ANSI_ERROR = ANSIData{Style: ANSI_STYLE_ERROR, Red: 0xFFFF}
+var ANSI_ERROR = ANSIData{Style: ANSI_STYLE_ERROR, Red: 0xFF}
 
-var ANSI_DEFAULT = ANSIData{Red: 0xFFFF, Green: 0xFFFF, Blue: 0xFFFF}
-var ANSI_BLACK = ANSIData{Red: 0x0000, Green: 0x0000, Blue: 0x0000}
-var ANSI_RED = ANSIData{Red: 0x7FFF}
-var ANSI_GREEN = ANSIData{Green: 0x7FFF}
-var ANSI_YELLOW = ANSIData{Red: 0x7FFF, Green: 0x7FFF}
-var ANSI_BLUE = ANSIData{Blue: 0x7FFF}
-var ANSI_MAGENTA = ANSIData{Red: 0x7FFF, Blue: 0x7FFF}
-var ANSI_CYAN = ANSIData{Green: 0x7FFF, Blue: 0x7FFF}
-var ANSI_GRAY = ANSIData{Red: 0xAAAA, Green: 0xAAAA, Blue: 0xAAAA}
+var ANSI_DEFAULT = ANSIData{Red: 0xFF, Green: 0xFF, Blue: 0xFF}
+var ANSI_BLACK = ANSIData{Red: 0x00, Green: 0x00, Blue: 0x00}
+var ANSI_RED = ANSIData{Red: 0x7F}
+var ANSI_GREEN = ANSIData{Green: 0x7F}
+var ANSI_YELLOW = ANSIData{Red: 0x7F, Green: 0x7F}
+var ANSI_BLUE = ANSIData{Blue: 0x7F}
+var ANSI_MAGENTA = ANSIData{Red: 0x7F, Blue: 0x7F}
+var ANSI_CYAN = ANSIData{Green: 0x7F, Blue: 0x7F}
+var ANSI_GRAY = ANSIData{Red: 0xAA, Green: 0xAA, Blue: 0xAA}
 
-var ANSI_LGRAY = ANSIData{Red: 0x7FFF, Green: 0x7FFF, Blue: 0x7FFF}
-var ANSI_LRED = ANSIData{Red: 0xFFFF}
-var ANSI_LGREEN = ANSIData{Green: 0xFFFF}
-var ANSI_LYELLOW = ANSIData{Red: 0xFFFF, Green: 0xFFFF}
-var ANSI_LBLUE = ANSIData{Blue: 0xFFFF}
-var ANSI_LMAGENTA = ANSIData{Red: 0xFFFF, Blue: 0xFFFF}
-var ANSI_LCYAN = ANSIData{Green: 0xFFFF, Blue: 0xFFFF}
-var ANSI_WHITE = ANSIData{Red: 0xFFFF, Green: 0xFFFF, Blue: 0xFFFF}
+var ANSI_LGRAY = ANSIData{Red: 0x7F, Green: 0x7F, Blue: 0x7F}
+var ANSI_LRED = ANSIData{Red: 0xFF}
+var ANSI_LGREEN = ANSIData{Green: 0xFF}
+var ANSI_LYELLOW = ANSIData{Red: 0xFF, Green: 0xFF}
+var ANSI_LBLUE = ANSIData{Blue: 0xFF}
+var ANSI_LMAGENTA = ANSIData{Red: 0xFF, Blue: 0xFF}
+var ANSI_LCYAN = ANSIData{Green: 0xFF, Blue: 0xFF}
+var ANSI_WHITE = ANSIData{Red: 0xFF, Green: 0xFF, Blue: 0xFF}
 
 func DecodeANSI(c string) ANSIData {
 

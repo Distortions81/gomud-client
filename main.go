@@ -27,17 +27,19 @@ import (
 //go:embed "unispacerg.ttf"
 var defaultFont []byte
 
+//Global, so colors can persist between lines
+var drawColor support.ANSIData = support.ANSI_DEFAULT
+
 const glyphCacheSize = 256
 const defaultFontSize = 18.0
 const clearEveryFrame = true
 
 //Constants
-const MAX_INPUT_LENGTH = 1024 * 1024 //Some kind of reasonable limit
-const MAX_LINE_LENGTH = 1024 * 10    //Larger than needed, for ANSI codes.
-const NET_POLL_MS = 66               //1/15th of a second
+const MAX_INPUT_LENGTH = 100 * 1024 //100kb, some kind of reasonable limit for net/input buffer
+const NET_POLL_MS = 66              //1/15th of a second
 
 const MAX_SCROLL_LINES = 10000 //Max scrollback
-const MAX_VIEW_LINES = 512     //Maximum lines on screen
+const MAX_VIEW_LINES = 250     //Maximum lines on screen
 
 const defaultWindowTitle = "GoMud-Client"
 const defaultServer = "127.0.0.1:7778"
@@ -131,6 +133,7 @@ func renderText() {
 	head := mainWin.lines.head
 	tail := mainWin.lines.tail
 
+	//Render old to new, so color codes can persist lines
 	for a := tail; a <= head && a >= tail; a++ {
 		if mainWin.lines.pixLines[a] == nil {
 			mainWin.lines.pixLines[a] = renderLine(a)
@@ -139,6 +142,8 @@ func renderText() {
 
 	}
 
+	//TODO: Optimize, only render if a line rendered falls within our viewport.
+	//We only render if there is something new to draw!
 	if didRender {
 		renderOffscreen()
 	}
@@ -146,15 +151,14 @@ func renderText() {
 
 func ansiColor(t string) []support.ANSIData {
 	textLen := len(t)
-	foundColor := false               //Mark when color code starts
-	colorStart := 0                   //Color code start position
-	colorEnd := 0                     //Color code end position
-	drawColor := support.ANSI_DEFAULT //Var to store the colors
+	foundColor := false //Mark when color code starts
+	colorStart := 0     //Color code start position
+	colorEnd := 0       //Color code end position
 
 	//Only alloc what we need
 	textColors := make([]support.ANSIData, textLen+1)
 
-	for z := 0; z < textLen; z++ { //Loop through all chars
+	for z := 0; z < textLen; z++ {
 		if t[z] == '\033' {
 			foundColor = true                    //Found ANSI escape code
 			colorStart = z                       //Record start pos
@@ -166,6 +170,7 @@ func ansiColor(t string) []support.ANSIData {
 			colorEnd = z
 			foundColor = false
 			if z+1 < textLen { //Make sure we dont run off the end of the string
+				//Use global, so colors can persist between liness
 				drawColor = support.DecodeANSI(t[colorStart : colorEnd+1])
 				textColors[z+1] = drawColor //Set color
 			}
@@ -196,7 +201,7 @@ func renderLine(pos int) *ebiten.Image {
 					mainWin.font.face,
 					int(math.Round(float64(x)*mainWin.font.charWidth)),
 					int(math.Round(mainWin.font.size)),
-					color.RGBA64{mainWin.lines.colors[pos][i].Red, mainWin.lines.colors[pos][i].Green, mainWin.lines.colors[pos][i].Blue, 0xFFFF})
+					color.RGBA{mainWin.lines.colors[pos][i].Red, mainWin.lines.colors[pos][i].Green, mainWin.lines.colors[pos][i].Blue, 0xFF})
 			}
 		}
 		return tempImg
@@ -205,20 +210,7 @@ func renderLine(pos int) *ebiten.Image {
 }
 
 func (g *Game) Update() error {
-
-	if clearEveryFrame == false {
-		g.counter++
-
-		//Force update 2 times a second
-		if g.counter%30 == 0 {
-			updateNow()
-		}
-		return nil
-
-	} else {
-		updateNow()
-		return nil
-	}
+	return nil
 }
 
 func updateNow() {
@@ -278,9 +270,9 @@ func init() {
 
 	mainWin.dirty = false
 
-	mainWin.offScreen = ebiten.NewImage(mainWin.width, mainWin.height)
+	mainWin.offScreen = ebiten.NewImage(int(mainWin.width), int(mainWin.height))
 	ebiten.SetWindowTitle(mainWin.title)
-	ebiten.SetWindowSize(mainWin.width, mainWin.height)
+	ebiten.SetWindowSize(int(mainWin.width), int(mainWin.height))
 
 	ebiten.SetWindowResizable(true)
 	ebiten.SetVsyncEnabled(false)
@@ -307,7 +299,7 @@ func init() {
 
 func renderOffscreen() {
 
-	if mainWin.dirty == false { //Check for no pending frame
+	if mainWin.dirty == false { //Check for no pending frames, or we will re-render for no reason
 		ebitenLock.Lock()
 		defer ebitenLock.Unlock()
 
@@ -324,6 +316,9 @@ func renderOffscreen() {
 				op.Filter = ebiten.FilterNearest
 				op.GeoM.Translate(0.0, float64(a)*mainWin.font.charHeight)
 				mainWin.offScreen.DrawImage(mainWin.lines.pixLines[a], op)
+			} else {
+				//Stop rendering here, lines after this are not yet ready.
+				return
 			}
 		}
 		mainWin.dirty = true
@@ -340,12 +335,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		mainWin.realHeight = sy
 		mainWin.offScreen = ebiten.NewImage(sx, sy)
 
-		updateNow()
 		mainWin.dirty = false
 		for x := 0; x < MAX_SCROLL_LINES; x++ {
 			mainWin.lines.pixLines[x] = nil
 		}
 		fmt.Println("Buffer resized.")
+		updateNow()
 	}
 
 	if mainWin.dirty == true || clearEveryFrame {
