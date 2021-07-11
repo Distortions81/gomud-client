@@ -1,5 +1,7 @@
 package support
 
+var drawColor ANSIData = ANSI_DEFAULT
+
 type ANSIData struct {
 	Red   uint8
 	Green uint8
@@ -112,4 +114,41 @@ func StripANSI(c string) string {
 		}
 	}
 	return c
+}
+
+func AnsiColor(t string) []ANSIData {
+	textLen := len(t)
+	foundColor := false //Mark when color code starts
+	colorStart := 0     //Color code start position
+	colorEnd := 0       //Color code end position
+
+	//Only alloc what we need
+	textColors := make([]ANSIData, textLen+1)
+
+	for z := 0; z < textLen; z++ {
+		if t[z] == '\033' {
+			foundColor = true            //Found ANSI escape code
+			colorStart = z               //Record start pos
+			textColors[z] = ANSI_CONTROL //Mark this as no-draw
+			continue
+		} else if z-colorStart > 10 { //Bail, this isn't a valid color code
+			foundColor = false
+		} else if foundColor && t[z] == 'm' { //Color code end
+			colorEnd = z
+			foundColor = false
+			if z+1 < textLen { //Make sure we dont run off the end of the string
+				//Use global, so colors can persist between liness
+				drawColor = DecodeANSI(t[colorStart : colorEnd+1])
+				textColors[z+1] = drawColor //Set color
+			}
+			textColors[z] = ANSI_CONTROL //Mark code end as so
+			continue
+		}
+		if foundColor {
+			textColors[z] = ANSI_CONTROL //Not valid
+		} else {
+			textColors[z] = drawColor //Mark all characters with current color
+		}
+	}
+	return textColors
 }

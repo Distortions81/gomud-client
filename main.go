@@ -27,9 +27,6 @@ import (
 //go:embed "data/unispacerg.ttf"
 var defaultFont []byte
 
-//Global, so colors can persist between lines
-var drawColor support.ANSIData = support.ANSI_DEFAULT
-
 const glyphCacheSize = 256
 const defaultFontSize = 18.0
 const clearEveryFrame = true
@@ -147,43 +144,6 @@ func renderText() {
 	if didRender {
 		renderOffscreen()
 	}
-}
-
-func ansiColor(t string) []support.ANSIData {
-	textLen := len(t)
-	foundColor := false //Mark when color code starts
-	colorStart := 0     //Color code start position
-	colorEnd := 0       //Color code end position
-
-	//Only alloc what we need
-	textColors := make([]support.ANSIData, textLen+1)
-
-	for z := 0; z < textLen; z++ {
-		if t[z] == '\033' {
-			foundColor = true                    //Found ANSI escape code
-			colorStart = z                       //Record start pos
-			textColors[z] = support.ANSI_CONTROL //Mark this as no-draw
-			continue
-		} else if z-colorStart > 10 { //Bail, this isn't a valid color code
-			foundColor = false
-		} else if foundColor && t[z] == 'm' { //Color code end
-			colorEnd = z
-			foundColor = false
-			if z+1 < textLen { //Make sure we dont run off the end of the string
-				//Use global, so colors can persist between liness
-				drawColor = support.DecodeANSI(t[colorStart : colorEnd+1])
-				textColors[z+1] = drawColor //Set color
-			}
-			textColors[z] = support.ANSI_CONTROL //Mark code end as so
-			continue
-		}
-		if foundColor {
-			textColors[z] = support.ANSI_CONTROL //Not valid
-		} else {
-			textColors[z] = drawColor //Mark all characters with current color
-		}
-	}
-	return textColors
 }
 
 func renderLine(pos int) *ebiten.Image {
@@ -393,7 +353,7 @@ func textToLines() {
 		x := 0
 		for i := mainWin.lines.head + 1; i < MAX_SCROLL_LINES && x <= numLines; i++ {
 			mainWin.lines.lines[i] = lines[x]
-			mainWin.lines.colors[i] = ansiColor(lines[x])
+			mainWin.lines.colors[i] = support.AnsiColor(lines[x])
 			x++
 		}
 		mainWin.lines.head += x
