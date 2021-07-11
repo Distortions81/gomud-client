@@ -24,7 +24,7 @@ import (
 
 //Embeds
 //default font
-//go:embed "unispacerg.ttf"
+//go:embed "data/unispacerg.ttf"
 var defaultFont []byte
 
 //Global, so colors can persist between lines
