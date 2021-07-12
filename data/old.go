@@ -102,8 +102,8 @@ type Game struct {
 	counter int
 }
 
-// repeatingKeyPressed return true when key is pressed considering the repeat state.
-func repeatingKeyPressed(key ebiten.Key) bool {
+// RepeatingKeyPressed return true when key is pressed considering the repeat state.
+func RepeatingKeyPressed(key ebiten.Key) bool {
 	d := inpututil.KeyPressDuration(key)
 	if d == 1 {
 		return true
@@ -166,22 +166,22 @@ func (g *Game) Update() error {
 	defer ActiveWin.Lock.Unlock()
 
 	//Increase mag
-	if repeatingKeyPressed(ebiten.KeyEqual) && ebiten.IsKeyPressed(ebiten.KeyControl) {
+	if RepeatingKeyPressed(ebiten.KeyEqual) && ebiten.IsKeyPressed(ebiten.KeyControl) {
 		ActiveWin.UserScale = ActiveWin.UserScale + 0.15
 		ActiveWin.Update = true
 		adjustScale()
 		updateScroll()
 		return nil
-	} else if repeatingKeyPressed(ebiten.KeyMinus) && ebiten.IsKeyPressed(ebiten.KeyControl) {
+	} else if RepeatingKeyPressed(ebiten.KeyMinus) && ebiten.IsKeyPressed(ebiten.KeyControl) {
 		ActiveWin.UserScale = ActiveWin.UserScale - 0.15
 		ActiveWin.Update = true
 		adjustScale()
 		updateScroll()
 		return nil
-	} else if repeatingKeyPressed(ebiten.KeyEnter) || repeatingKeyPressed(ebiten.KeyKPEnter) {
+	} else if RepeatingKeyPressed(ebiten.KeyEnter) || RepeatingKeyPressed(ebiten.KeyKPEnter) {
 		ActiveWin.InputLine += "\n"
 		keyPressed = true
-	} else if repeatingKeyPressed(ebiten.KeyBackspace) {
+	} else if RepeatingKeyPressed(ebiten.KeyBackspace) {
 		if len(ActiveWin.InputLine) >= 1 {
 			ActiveWin.InputLine = ActiveWin.InputLine[:len(ActiveWin.InputLine)-1]
 			ActiveWin.ScrollBack = ActiveWin.ScrollBack[:len(ActiveWin.ScrollBack)-1]
