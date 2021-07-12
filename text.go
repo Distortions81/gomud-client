@@ -2,8 +2,6 @@ package main
 
 import (
 	"strings"
-
-	"./support"
 )
 
 func AddLine(text string) {
@@ -26,7 +24,7 @@ func textToLines() {
 		x := 0
 		for i := MainWin.lines.head + 1; i < MAX_SCROLL_LINES && x <= numLines; i++ {
 			MainWin.lines.lines[i] = lines[x]
-			MainWin.lines.colors[i] = support.AnsiColor(lines[x])
+			MainWin.lines.colors[i] = AnsiColor(lines[x])
 			x++
 		}
 		MainWin.lines.head += x

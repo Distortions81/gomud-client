@@ -1,4 +1,4 @@
-package support
+package main
 
 var drawColor ANSIData = ANSI_DEFAULT
 

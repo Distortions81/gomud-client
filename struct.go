@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"sync"
 
-	"./support"
 	"github.com/hajimehoshi/ebiten"
 	"golang.org/x/image/font"
 )
@@ -37,7 +36,7 @@ type TextHistory struct {
 	rawTextLock sync.Mutex
 
 	lines    [MAX_SCROLL_LINES]string
-	colors   [MAX_SCROLL_LINES][]support.ANSIData
+	colors   [MAX_SCROLL_LINES][]ANSIData
 	pixLines [MAX_SCROLL_LINES]*ebiten.Image
 
 	pos  int

@@ -5,7 +5,6 @@ import (
 	"math"
 	"strconv"
 
-	"./support"
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/text"
 )
@@ -71,7 +70,7 @@ func renderLine(pos int) *ebiten.Image {
 		tempImg := ebiten.NewImage(MainWin.realWidth, int(math.Round(MainWin.font.size+MainWin.font.vertSpace)))
 		x := 0
 		for i := 0; i < len; i++ {
-			if strconv.IsPrint(rune(MainWin.lines.lines[pos][i])) && MainWin.lines.colors[pos][i] != support.ANSI_CONTROL {
+			if strconv.IsPrint(rune(MainWin.lines.lines[pos][i])) && MainWin.lines.colors[pos][i] != ANSI_CONTROL {
 				x++
 				text.Draw(tempImg, string(MainWin.lines.lines[pos][i]),
 					MainWin.font.face,
